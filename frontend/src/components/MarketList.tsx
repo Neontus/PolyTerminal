@@ -1,8 +1,11 @@
 import { useState, useMemo } from 'react';
-import { TrendingUp, TrendingDown, Minus, Lock, Unlock, Activity } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Lock, Unlock, Activity, ExternalLink, Plus } from 'lucide-react';
 import { usePolymarket } from '../hooks/usePolymarket';
 import { usePythSignals } from '../hooks/usePythSignals';
 import { useWhaleMovements } from '../hooks/useWhaleMovements';
+import axios from 'axios';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export default function MarketList() {
     const [selectedMarket, setSelectedMarket] = useState<string | null>(null);
@@ -10,6 +13,25 @@ export default function MarketList() {
     const { signals } = usePythSignals();
     const { movements } = useWhaleMovements();
     const [filter, setFilter] = useState('All Categories');
+
+    // Whale Config State
+    const [whaleInput, setWhaleInput] = useState('');
+    const [configStatus, setConfigStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+    const handleAddWhale = async () => {
+        if (!whaleInput) return;
+        try {
+            await axios.post(`${API_URL}/api/config/whales`, {
+                addresses: [whaleInput] // In a real app we'd merge, here we just push single for demo
+            });
+            setWhaleInput('');
+            setConfigStatus('success');
+            setTimeout(() => setConfigStatus('idle'), 3000);
+        } catch (err) {
+            console.error(err);
+            setConfigStatus('error');
+        }
+    };
 
     // Combine data
     const enrichedMarkets = useMemo(() => {
@@ -60,7 +82,26 @@ export default function MarketList() {
                     <h2 className="text-3xl font-bold text-white">Live Markets</h2>
                     <p className="text-gray-400 mt-1">Browse prediction markets with AI-powered signals</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-4 items-center">
+                    {/* Whale Config Input */}
+                    <div className="hidden md:flex items-center gap-2 bg-white/5 rounded-xl px-3 py-2 border border-white/10">
+                        <input
+                            type="text"
+                            placeholder="Track Address..."
+                            value={whaleInput}
+                            onChange={(e) => setWhaleInput(e.target.value)}
+                            className="bg-transparent border-none focus:outline-none text-sm text-white w-32 placeholder-gray-500"
+                        />
+                        <button
+                            onClick={handleAddWhale}
+                            className="p-1 hover:bg-white/10 rounded-lg transition-colors text-blue-400"
+                            title="Add to Tracker"
+                        >
+                            <Plus className="w-4 h-4" />
+                        </button>
+                        {configStatus === 'success' && <span className="text-xs text-green-400">Added!</span>}
+                    </div>
+
                     <select
                         value={filter}
                         onChange={(e) => setFilter(e.target.value)}
@@ -116,12 +157,22 @@ export default function MarketList() {
                         </div>
 
                         {/* Details Section */}
-                        {(market.signals.length > 0 || market.movements.length > 0) ? (
-                            <div className="space-y-2 border-t border-white/5 pt-4">
-                                <div className="flex items-center justify-between">
-                                    <h4 className="text-sm font-medium text-gray-300">
-                                        Insights ({market.signals.length + market.movements.length})
-                                    </h4>
+                        <div className="space-y-2 border-t border-white/5 pt-4">
+                            <div className="flex items-center justify-between">
+                                <h4 className="text-sm font-medium text-gray-300">
+                                    Insights ({market.signals.length + market.movements.length})
+                                </h4>
+
+                                <div className="flex gap-3">
+                                    <a
+                                        href={`https://polymarket.com/event/${market.slug}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors"
+                                    >
+                                        <ExternalLink className="w-3 h-3" />
+                                        View on Polymarket
+                                    </a>
                                     <button
                                         onClick={() => setSelectedMarket(selectedMarket === market.id ? null : market.id)}
                                         className="text-sm text-blue-400 hover:text-blue-300"
@@ -129,46 +180,51 @@ export default function MarketList() {
                                         {selectedMarket === market.id ? 'Hide' : 'Show'} Details
                                     </button>
                                 </div>
-                                {selectedMarket === market.id && (
-                                    <div className="space-y-4 animate-in slide-in-from-top-2 duration-200">
-                                        {/* Signals in Details */}
-                                        {market.signals.length > 0 && (
-                                            <div className="space-y-2">
-                                                <h5 className="text-xs text-gray-500 uppercase tracking-wider">Pyth Signals</h5>
-                                                {market.signals.map((signal) => (
-                                                    <SignalCard key={signal.id} signal={signal} />
-                                                ))}
-                                            </div>
-                                        )}
+                            </div>
 
-                                        {/* Movements in Details */}
-                                        {market.movements.length > 0 && (
-                                            <div className="space-y-2">
-                                                <h5 className="text-xs text-gray-500 uppercase tracking-wider">Top Trader Activity</h5>
-                                                {market.movements.map((move, i) => (
-                                                    <div key={i} className="bg-black/20 p-3 rounded-lg flex justify-between items-center text-sm">
-                                                        <div className="flex gap-2 items-center">
-                                                            <div className={`w-2 h-2 rounded-full ${move.type === 'BUY' ? 'bg-green-500' : 'bg-red-500'}`} />
-                                                            <span className="text-gray-300 font-mono">{move.trader.substring(0, 8)}...</span>
-                                                        </div>
-                                                        <div className="text-white">
-                                                            {move.type} {move.outcome}
-                                                        </div>
-                                                        <div className="text-gray-400">
-                                                            {new Date(move.timestamp).toLocaleTimeString()}
-                                                        </div>
+                            {selectedMarket === market.id && (
+                                <div className="space-y-4 animate-in slide-in-from-top-2 duration-200">
+                                    {/* Empty State */}
+                                    {market.signals.length === 0 && market.movements.length === 0 && (
+                                        <div className="text-center py-6 bg-black/20 rounded-xl border border-dashed border-white/10">
+                                            <div className="text-gray-500 text-sm">No signals detected yet</div>
+                                            <div className="text-gray-600 text-xs mt-1">Waiting for Pyth confidence anomalies or whale activity...</div>
+                                        </div>
+                                    )}
+
+                                    {/* Signals in Details */}
+                                    {market.signals.length > 0 && (
+                                        <div className="space-y-2">
+                                            <h5 className="text-xs text-gray-500 uppercase tracking-wider">Pyth Signals</h5>
+                                            {market.signals.map((signal) => (
+                                                <SignalCard key={signal.id} signal={signal} />
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Movements in Details */}
+                                    {market.movements.length > 0 && (
+                                        <div className="space-y-2">
+                                            <h5 className="text-xs text-gray-500 uppercase tracking-wider">Top Trader Activity</h5>
+                                            {market.movements.map((move, i) => (
+                                                <div key={i} className="bg-black/20 p-3 rounded-lg flex justify-between items-center text-sm">
+                                                    <div className="flex gap-2 items-center">
+                                                        <div className={`w-2 h-2 rounded-full ${move.type === 'BUY' ? 'bg-green-500' : 'bg-red-500'}`} />
+                                                        <span className="text-gray-300 font-mono">{move.trader.substring(0, 8)}...</span>
                                                     </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="text-center py-2 text-xs text-gray-600">
-                                No specific insights yet
-                            </div>
-                        )}
+                                                    <div className="text-white">
+                                                        {move.type} {move.outcome}
+                                                    </div>
+                                                    <div className="text-gray-400">
+                                                        {new Date(move.timestamp).toLocaleTimeString()}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 ))}
             </div>
@@ -177,7 +233,7 @@ export default function MarketList() {
 }
 
 function SignalCard({ signal }: { signal: any }) {
-    // Determine direction from confidence or if we had a previous value. 
+    // Determine direction from confidence or if we had a previous value.
     // Pyth signal just gives "Confidence Low/High". 
     // Let's assume High Severity = BAD/Low Confidence? Or High Severity = High Volatility?
     // Based on backend: isAnomaly means confidence spike.

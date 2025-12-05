@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { WebSocketServer, WebSocket } from 'ws';
+import { createServer } from 'http';
 import { polymarketService } from './services/polymarket';
 import { pythService } from './services/pyth';
 
@@ -16,12 +18,47 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Create HTTP server to attach WebSocket
+const server = createServer(app);
+const wss = new WebSocketServer({ server });
+
+// Track connected clients
+wss.on('connection', (ws) => {
+    console.log('Client connected to WebSocket');
+    
+    ws.on('close', () => {
+        console.log('Client disconnected from WebSocket');
+    });
+
+    // Send initial "Connected" message
+    ws.send(JSON.stringify({ type: 'WELCOME', message: 'Connected to Prediction Copilot Stream' }));
+});
+
+// Initialize Polymarket Service and connect to their Real-Time WebSocket
+// We pass a callback that broadcasts the data to OUR frontend via OUR WebSocket
+polymarketService.connectWebSocket((data) => {
+    // Broadcast to all connected frontend clients
+    const message = JSON.stringify(data);
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+        }
+    });
+});
+
+// Start fetching markets (which will trigger subscriptions)
+// We initially fetch top markets to populate the list and subscribe
+polymarketService.getTopMarkets().then(markets => {
+    console.log(`Initial fetch: ${markets.length} markets found.`);
+});
+
 // Health check
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     service: 'prediction-copilot-backend',
+    clients: wss.clients.size
   });
 });
 
@@ -33,7 +70,7 @@ app.get('/health', (_req, res) => {
  */
 app.get('/api/markets', async (req, res) => {
     try {
-        const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+        const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
         const markets = await polymarketService.getTopMarkets(limit);
         res.json(markets);
     } catch (error) {
@@ -70,9 +107,20 @@ app.get('/api/signals/whales', async (_req, res) => {
     }
 });
 
+// Config Endpoint
+app.post('/api/config/whales', (req, res) => {
+    const { addresses } = req.body;
+    if (Array.isArray(addresses)) {
+        polymarketService.setTrackedWhales(addresses);
+        res.json({ success: true, message: 'Updated tracked whales', count: addresses.length });
+    } else {
+        res.status(400).json({ error: 'Invalid format. Expected { addresses: string[] }' });
+    }
+});
+
 // Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Backend server running on port ${PORT}`);
+server.listen(PORT, () => {
+  console.log(`🚀 Backend server (HTTP + WS) running on port ${PORT}`);
   console.log(`📍 Environment: ${process.env.NODE_ENV}`);
   console.log(`🔗 RPC: ${process.env.SOLANA_RPC_URL}`);
 });

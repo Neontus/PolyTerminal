@@ -1,4 +1,5 @@
 import axios from 'axios';
+import WebSocket from 'ws';
 
 // Interfaces for Polymarket Data
 export interface PolymarketMarket {
@@ -14,6 +15,9 @@ export interface PolymarketMarket {
     }[];
     endDate: string;
     active: boolean;
+    // Optional for UI enrichment
+    signals?: any[];
+    movements?: any[];
 }
 
 export interface TraderMovement {
@@ -39,79 +43,266 @@ const TRACKED_WHALES = [
 ];
 
 export class PolymarketService {
+    // Store real fetched markets to correlate whale activity
+    private currentMarkets: PolymarketMarket[] = [];
     
+    // Callback for broadcasting updates
+    private onMarketUpdate?: (data: any) => void;
+    private ws?: WebSocket;
+    private wsPingInterval?: NodeJS.Timeout;
+
     /**
-     * Fetch top active markets from Polymarket Gamma API
+     * Connect to Polymarket CLOB WebSocket
      */
-    async getTopMarkets(limit: number = 20): Promise<PolymarketMarket[]> {
+    /**
+     * Connect to Polymarket CLOB WebSocket
+     */
+    connectWebSocket(broadcastCallback: (data: any) => void) {
+        this.onMarketUpdate = broadcastCallback;
+        
         try {
-            // Using the Gamma API /query or similar endpoint. 
-            // For hackathon, we can use the /markets endpoint if available or a specific query.
-            // Simplified fetch:
-            const response = await axios.get(`${CLOB_API_URL}/markets`, {
+            console.log("Connecting to Polymarket CLOB WebSocket...");
+            // Correct Endpoint from docs: wss://ws-subscriptions-clob.polymarket.com/ws/market
+            this.ws = new WebSocket('wss://ws-subscriptions-clob.polymarket.com/ws/market');
+
+            this.ws.on('open', () => {
+                console.log("✅ Connected to Polymarket CLOB WebSocket");
+                this.startPing();
+            });
+
+            this.ws.on('message', (data: WebSocket.RawData) => {
+                try {
+                    const messageStr = data.toString();
+                    if (messageStr === 'PONG') return;
+
+                    const message = JSON.parse(messageStr);
+                    
+                    // Handle Price Updates
+                    // The 'market' channel returns updates. structure might vary.
+                    // Based on docs, it returns array of events.
+                    if (Array.isArray(message)) {
+                        message.forEach(msg => {
+                            if (msg.event_type === 'price_change' || msg.price) {
+                                this.handlePriceUpdate(msg);
+                            }
+                        });
+                    } else if (message.event_type === 'price_change' || message.price) {
+                         this.handlePriceUpdate(message);
+                    }
+                } catch (e) {
+                    console.error("Error parsing WS message:", e);
+                }
+            });
+
+            this.ws.on('error', (err) => {
+                console.error("Polymarket WS Error:", err);
+            });
+
+            this.ws.on('close', () => {
+                console.log("Polymarket WS Closed. Reconnecting in 5s...");
+                clearInterval(this.wsPingInterval);
+                setTimeout(() => this.connectWebSocket(broadcastCallback), 5000);
+            });
+
+        } catch (e) {
+            console.error("Failed to init WS:", e);
+        }
+    }
+
+    private startPing() {
+        this.wsPingInterval = setInterval(() => {
+            if (this.ws?.readyState === WebSocket.OPEN) {
+                this.ws.send("PING"); // Docs say send "PING" string, not JSON
+            }
+        }, 30000);
+    }
+
+    private handlePriceUpdate(msg: any) {
+        // Find market with this asset_id (token_id)
+        // msg structure might use asset_id or token_id
+        if (!this.currentMarkets) return;
+        
+        const assetId = msg.asset_id || msg.token_id;
+        if (!assetId) return;
+
+        let updated = false;
+        
+        for (const market of this.currentMarkets) {
+            const token = market.tokens.find(t => t.tokenId === assetId);
+            if (token) {
+                const oldPrice = token.price;
+                const newPrice = parseFloat(msg.price);
+                
+                if (oldPrice !== newPrice) {
+                    token.price = newPrice;
+                    updated = true;
+                    
+                    // Broadcast Update
+                    if (this.onMarketUpdate) {
+                        this.onMarketUpdate({
+                            type: 'MARKET_UPDATE',
+                            marketId: market.id,
+                            price: newPrice, 
+                            tokenId: token.tokenId,
+                            outcome: token.outcome
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Subscribe to live price/ticker updates for current markets
+     */
+    private subscribeToMarkets(markets: PolymarketMarket[]) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+        const assetIds = markets.flatMap(m => m.tokens.map(t => t.tokenId));
+        
+        // Polymarket WS usually expects strings for asset_ids
+        if (assetIds.length > 0) {
+            // Protocol from docs: {"assets_ids": [...], "type": "market"}
+            const msg = {
+                assets_ids: assetIds,
+                type: "market"
+            };
+            this.ws.send(JSON.stringify(msg));
+            console.log(`Subscribed to ${assetIds.length} assets on Polymarket WS`);
+        }
+    }
+    async getTopMarkets(limit: number = 10): Promise<PolymarketMarket[]> {
+        try {
+            // Using the Gamma API /events endpoint for fresh 2025 markets
+            const response = await axios.get(`${GRAPH_API_URL}`, {
                 params: {
                     limit,
                     active: true,
                     closed: false,
-                    order: 'volume24h',
+                    order: 'createdAt',
                     ascending: false
+                },
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'application/json'
                 }
             });
 
-            // Iterate and format
-            // Note: The CLOB API structure might vary, adapting to a generic structure for now.
-            // If CLOB API fails or is complex, we might fallback to hardcoded popular tags.
+            // Gamma returns a list of Events, each containing Markets
+            const events = Array.isArray(response.data) ? response.data : (response.data.data || []);
             
-            const markets = response.data.data || [];
-            
-            return markets.map((m: any) => ({
-                id: m.condition_id,
-                question: m.question,
-                slug: m.slug,
-                volume: m.volume_24h || 0,
-                tokens: m.tokens?.map((t: any) => ({
-                    tokenId: t.token_id,
-                    price: t.price || 0.5,
-                    outcome: t.outcome,
-                    winner: false
-                })) || [],
-                endDate: m.end_date_iso,
-                active: m.active
-            }));
+            const markets: PolymarketMarket[] = [];
 
-        } catch (error) {
-            console.error("Failed to fetch markets from Polymarket CLOB:", error);
-            // Fallback to mock markets for demo
-            return [
-                {
-                    id: 'mock-1',
-                    question: 'Will Bitcoin reach $100,000 in 2024?',
-                    slug: 'bitcoin-100k-2024',
-                    volume: 1500000,
-                    tokens: [{ tokenId: 't1', price: 0.65, outcome: 'YES', winner: false }],
-                    endDate: '2024-12-31',
-                    active: true
-                },
-                {
-                    id: 'mock-2',
-                    question: 'Will Ethereum ETF launch in Q1?',
-                    slug: 'eth-etf-q1',
-                    volume: 800000,
-                    tokens: [{ tokenId: 't2', price: 0.30, outcome: 'YES', winner: false }],
-                    endDate: '2024-03-31',
-                    active: true
-                },
-                {
-                    id: 'mock-3',
-                    question: 'Solana > $200 in May?',
-                    slug: 'solana-200-may',
-                    volume: 500000,
-                    tokens: [{ tokenId: 't3', price: 0.80, outcome: 'YES', winner: false }],
-                    endDate: '2024-05-31',
-                    active: true
+            for (const event of events) {
+                // Each event can have multiple markets, we take the primary/first one
+                if (!event.markets || event.markets.length === 0) continue;
+                
+                const m = event.markets[0];
+                
+                // Parse JSON string fields
+                let outcomePrices: string[] = [];
+                let outcomes: string[] = [];
+                let tokenIds: string[] = [];
+                
+                try {
+                    outcomePrices = JSON.parse(m.outcomePrices || '[]');
+                    outcomes = JSON.parse(m.outcomes || '[]');
+                    tokenIds = JSON.parse(m.clobTokenIds || '[]');
+                } catch (e) {
+                    console.error(`Error parsing fields for market ${m.id}`, e);
+                    continue;
                 }
-            ];
+
+                // Map tokens
+                const tokens = outcomes.map((outcome, index) => ({
+                    tokenId: tokenIds[index] || `mock-${m.id}-${index}`,
+                    price: parseFloat(outcomePrices[index] || '0'),
+                    outcome: outcome,
+                    winner: false
+                }));
+
+                markets.push({
+                    id: m.conditionId, // Use conditionId as unique ID
+                    question: m.question,
+                    slug: event.slug, // Use event slug for navigation
+                    volume: m.liquidity ? parseFloat(m.liquidity) : 0, // Gamma uses liquidity or volume
+                    tokens: tokens,
+                    endDate: m.endDate,
+                    active: m.active
+                });
+            }
+
+            // Save for whale generator
+            this.currentMarkets = markets;
+            
+            // Subscribe to WS updates
+            this.subscribeToMarkets(markets);
+
+            return markets;
+
+        } catch (error: any) {
+            console.error("Failed to fetch markets from Polymarket Gamma API. Falling back to mocks.");
+            if (axios.isAxiosError(error)) {
+                 console.error(`Status: ${error.response?.status}, StatusText: ${error.response?.statusText}`);
+            }
+            // Fallback to mock markets ONLY if API fails
+            const mocks = this.generateMockMarkets();
+            this.currentMarkets = mocks; 
+            return mocks;
         }
+    }
+
+    /**
+     * Update the list of tracked whales dynamically
+     */
+    setTrackedWhales(addresses: string[]) {
+        if (addresses && addresses.length > 0) {
+            // Replace the static list with user provided list
+            // We modify the global const by pushing to it or we can change implementation to use a class property.
+            // Since TRACKED_WHALES is a const module-level, better to make it a class property or modify the usage.
+            // Let's modify the usage in getWhaleMovements to prefer a class property.
+            this.customWhales = addresses;
+        }
+    }
+
+    private customWhales: string[] = [];
+
+    private generateMockMarkets(): PolymarketMarket[] {
+        return [
+            {
+                id: 'mock-1',
+                question: 'Will Bitcoin reach $150,000 in 2025?',
+                slug: 'bitcoin-150k-2025',
+                volume: 5000000,
+                tokens: [{ tokenId: 't1', price: 0.45, outcome: 'YES', winner: false }, { tokenId: 't2', price: 0.55, outcome: 'NO', winner: false }],
+                endDate: '2025-12-31',
+                active: true,
+                signals: [],
+                movements: []
+            },
+            {
+                id: 'mock-2',
+                question: 'Solana to flip Ethereum by 2026?',
+                slug: 'sol-flip-eth-2026',
+                volume: 2500000,
+                tokens: [{ tokenId: 't3', price: 0.20, outcome: 'YES', winner: false }, { tokenId: 't4', price: 0.80, outcome: 'NO', winner: false }],
+                endDate: '2026-01-01',
+                active: true,
+                signals: [],
+                movements: []
+            },
+            {
+                id: 'mock-3',
+                question: 'GPT-5 Release before Q3 2025?',
+                slug: 'gpt5-release-q3-2025',
+                volume: 1000000,
+                tokens: [{ tokenId: 't5', price: 0.60, outcome: 'YES', winner: false }, { tokenId: 't6', price: 0.40, outcome: 'NO', winner: false }],
+                endDate: '2025-07-01',
+                active: true,
+                signals: [],
+                movements: []
+            }
+        ];
     }
 
     /**
@@ -127,17 +318,26 @@ export class PolymarketService {
         // Generate 3-5 random movements
         const count = 3 + Math.floor(Math.random() * 3);
         
+        // Ensure we have markets to reference
+        const refMarkets = this.currentMarkets.length > 0 ? this.currentMarkets : this.generateMockMarkets();
+
+        // Use user-provided whales if available, otherwise default list
+        const sourceWhales = this.customWhales.length > 0 ? this.customWhales : TRACKED_WHALES;
+
         for (let i = 0; i < count; i++) {
-            const whale = TRACKED_WHALES[Math.floor(Math.random() * TRACKED_WHALES.length)];
+            const whale = sourceWhales[Math.floor(Math.random() * sourceWhales.length)];
             const action = actions[Math.floor(Math.random() * actions.length)] as 'BUY' | 'SELL';
             const outcome = outcomes[Math.floor(Math.random() * outcomes.length)] as 'YES' | 'NO';
             const price = 0.3 + Math.random() * 0.6; // Random price between 0.30 and 0.90
             
+            // Pick a random real market
+            const market = refMarkets[Math.floor(Math.random() * refMarkets.length)];
+
             movements.push({
                 txHash: '0x' + Math.random().toString(16).slice(2, 40),
                 trader: whale,
-                marketId: 'mock-market-' + i,
-                marketQuestion: 'Will Bitcoin reach $100k by 2024?', // Simplified common market
+                marketId: market.id, // REAL Market ID
+                marketQuestion: market.question, // REAL Market Question
                 type: action,
                 outcome: outcome,
                 amount: Math.floor(Math.random() * 10000),
