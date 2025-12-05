@@ -1,65 +1,57 @@
-import { useState } from 'react';
-import { TrendingUp, TrendingDown, Minus, Lock, Unlock } from 'lucide-react';
-
-// Mock data for demonstration
-const mockMarkets = [
-    {
-        id: '1',
-        question: 'Will Bitcoin reach $100,000 by end of 2024?',
-        currentPrice: 0.67,
-        volume24h: 125000,
-        category: 'Crypto',
-        signals: [
-            {
-                id: 's1',
-                analyst: '7xKX...9pQz',
-                direction: 1,
-                confidence: 85,
-                zScore: 1.8,
-                price: 2.5,
-                isPurchased: false,
-            },
-            {
-                id: 's2',
-                analyst: '4mNv...2kLp',
-                direction: -1,
-                confidence: 72,
-                zScore: -1.2,
-                price: 0,
-                isPurchased: false,
-            },
-        ],
-    },
-    {
-        id: '2',
-        question: 'Will Ethereum ETF be approved in Q1 2025?',
-        currentPrice: 0.45,
-        volume24h: 89000,
-        category: 'Crypto',
-        signals: [
-            {
-                id: 's3',
-                analyst: '9bRt...5xWq',
-                direction: 1,
-                confidence: 78,
-                zScore: 1.4,
-                price: 1.5,
-                isPurchased: true,
-            },
-        ],
-    },
-    {
-        id: '3',
-        question: 'Will AI regulation pass in the US Senate?',
-        currentPrice: 0.32,
-        volume24h: 56000,
-        category: 'Politics',
-        signals: [],
-    },
-];
+import { useState, useMemo } from 'react';
+import { TrendingUp, TrendingDown, Minus, Lock, Unlock, Activity } from 'lucide-react';
+import { usePolymarket } from '../hooks/usePolymarket';
+import { usePythSignals } from '../hooks/usePythSignals';
+import { useWhaleMovements } from '../hooks/useWhaleMovements';
 
 export default function MarketList() {
     const [selectedMarket, setSelectedMarket] = useState<string | null>(null);
+    const { markets, loading: marketsLoading } = usePolymarket();
+    const { signals } = usePythSignals();
+    const { movements } = useWhaleMovements();
+    const [filter, setFilter] = useState('All Categories');
+
+    // Combine data
+    const enrichedMarkets = useMemo(() => {
+        return markets.map(market => {
+            // Find related Pyth signals
+            // Simple keyword matching for hackathon
+            const marketSignals = signals.filter(s => {
+                const keyword = s.marketId.split('/')[0]; // e.g. BTC from BTC/USD
+                // Map common symbols to words found in questions
+                const mappings: Record<string, string[]> = {
+                    'BTC': ['Bitcoin', 'BTC'],
+                    'ETH': ['Ethereum', 'Ether', 'ETH'],
+                    'SOL': ['Solana', 'SOL']
+                };
+                const keywords = mappings[keyword] || [keyword];
+                return keywords.some(k => market.question.includes(k));
+            });
+
+            // Find related movements (mock movements have 'marketId' that currently won't match real Gamma IDs easily)
+            // But for demo our movements are generated with random market names.
+            // Let's just blindly attach "recent movements" to the top markets to simulate activity for the demo.
+            // Or better: filter movements that match the question string if we updated the generator.
+            // Generator makes questions like "Will Bitcoin..." so string match works.
+            const marketMovements = movements.filter(m =>
+                market.question.includes(m.marketQuestion.substring(0, 10))
+            );
+
+            return {
+                ...market,
+                signals: marketSignals,
+                movements: marketMovements
+            };
+        });
+    }, [markets, signals, movements]);
+
+    const filteredMarkets = filter === 'All Categories'
+        ? enrichedMarkets
+        : enrichedMarkets.filter(m => m.category === filter);
+
+    if (marketsLoading) {
+        return <div className="text-white text-center py-20">Loading Markets...</div>;
+    }
 
     return (
         <div className="space-y-6">
@@ -69,7 +61,11 @@ export default function MarketList() {
                     <p className="text-gray-400 mt-1">Browse prediction markets with AI-powered signals</p>
                 </div>
                 <div className="flex gap-2">
-                    <select className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <select
+                        value={filter}
+                        onChange={(e) => setFilter(e.target.value)}
+                        className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
                         <option>All Categories</option>
                         <option>Crypto</option>
                         <option>Politics</option>
@@ -79,7 +75,7 @@ export default function MarketList() {
             </div>
 
             <div className="grid gap-4">
-                {mockMarkets.map((market) => (
+                {filteredMarkets.map((market) => (
                     <div
                         key={market.id}
                         className="bg-gradient-to-br from-slate-900/80 to-slate-800/80 border border-white/10 rounded-2xl p-6 hover:border-blue-500/50 transition-all duration-200 backdrop-blur-sm"
@@ -91,10 +87,27 @@ export default function MarketList() {
                                         {market.category}
                                     </span>
                                     <span className="text-gray-400 text-sm">
-                                        ${(market.volume24h / 1000).toFixed(0)}k volume
+                                        ${(market.volume / 1000).toFixed(0)}k volume
                                     </span>
+                                    {market.signals.length > 0 && (
+                                        <span className="px-2 py-0.5 rounded text-xs bg-red-500/20 text-red-300 border border-red-500/30 animate-pulse">
+                                            Signal Detected
+                                        </span>
+                                    )}
                                 </div>
                                 <h3 className="text-xl font-semibold text-white mb-2">{market.question}</h3>
+
+                                {/* Whale Movements Preview */}
+                                {market.movements.slice(0, 1).map((move, i) => (
+                                    <div key={i} className="flex items-center gap-2 text-xs text-purple-300 mb-2">
+                                        <Activity className="w-3 h-3" />
+                                        <span>
+                                            Whale {move.trader.substring(0, 6)}...
+                                            {move.type === 'BUY' ? ' bought ' : ' sold '}
+                                            {move.outcome} ({move.amount})
+                                        </span>
+                                    </div>
+                                ))}
                             </div>
                             <div className="text-right">
                                 <div className="text-3xl font-bold text-white">{(market.currentPrice * 100).toFixed(0)}¢</div>
@@ -102,10 +115,13 @@ export default function MarketList() {
                             </div>
                         </div>
 
-                        {market.signals.length > 0 ? (
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between mb-2">
-                                    <h4 className="text-sm font-medium text-gray-300">Available Signals ({market.signals.length})</h4>
+                        {/* Details Section */}
+                        {(market.signals.length > 0 || market.movements.length > 0) ? (
+                            <div className="space-y-2 border-t border-white/5 pt-4">
+                                <div className="flex items-center justify-between">
+                                    <h4 className="text-sm font-medium text-gray-300">
+                                        Insights ({market.signals.length + market.movements.length})
+                                    </h4>
                                     <button
                                         onClick={() => setSelectedMarket(selectedMarket === market.id ? null : market.id)}
                                         className="text-sm text-blue-400 hover:text-blue-300"
@@ -114,16 +130,43 @@ export default function MarketList() {
                                     </button>
                                 </div>
                                 {selectedMarket === market.id && (
-                                    <div className="space-y-2">
-                                        {market.signals.map((signal) => (
-                                            <SignalCard key={signal.id} signal={signal} />
-                                        ))}
+                                    <div className="space-y-4 animate-in slide-in-from-top-2 duration-200">
+                                        {/* Signals in Details */}
+                                        {market.signals.length > 0 && (
+                                            <div className="space-y-2">
+                                                <h5 className="text-xs text-gray-500 uppercase tracking-wider">Pyth Signals</h5>
+                                                {market.signals.map((signal) => (
+                                                    <SignalCard key={signal.id} signal={signal} />
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {/* Movements in Details */}
+                                        {market.movements.length > 0 && (
+                                            <div className="space-y-2">
+                                                <h5 className="text-xs text-gray-500 uppercase tracking-wider">Top Trader Activity</h5>
+                                                {market.movements.map((move, i) => (
+                                                    <div key={i} className="bg-black/20 p-3 rounded-lg flex justify-between items-center text-sm">
+                                                        <div className="flex gap-2 items-center">
+                                                            <div className={`w-2 h-2 rounded-full ${move.type === 'BUY' ? 'bg-green-500' : 'bg-red-500'}`} />
+                                                            <span className="text-gray-300 font-mono">{move.trader.substring(0, 8)}...</span>
+                                                        </div>
+                                                        <div className="text-white">
+                                                            {move.type} {move.outcome}
+                                                        </div>
+                                                        <div className="text-gray-400">
+                                                            {new Date(move.timestamp).toLocaleTimeString()}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
                         ) : (
-                            <div className="text-center py-4 text-gray-500">
-                                No signals available for this market yet
+                            <div className="text-center py-2 text-xs text-gray-600">
+                                No specific insights yet
                             </div>
                         )}
                     </div>
@@ -134,42 +177,27 @@ export default function MarketList() {
 }
 
 function SignalCard({ signal }: { signal: any }) {
-    const directionIcon = signal.direction === 1 ? <TrendingUp className="w-4 h-4" /> : signal.direction === -1 ? <TrendingDown className="w-4 h-4" /> : <Minus className="w-4 h-4" />;
-    const directionColor = signal.direction === 1 ? 'text-green-400' : signal.direction === -1 ? 'text-red-400' : 'text-gray-400';
-    const directionBg = signal.direction === 1 ? 'bg-green-500/10 border-green-500/30' : signal.direction === -1 ? 'bg-red-500/10 border-red-500/30' : 'bg-gray-500/10 border-gray-500/30';
+    // Determine direction from confidence or if we had a previous value. 
+    // Pyth signal just gives "Confidence Low/High". 
+    // Let's assume High Severity = BAD/Low Confidence? Or High Severity = High Volatility?
+    // Based on backend: isAnomaly means confidence spike.
+    // Let's display it generically.
 
     return (
         <div className="bg-black/30 border border-white/5 rounded-xl p-4 hover:bg-black/40 transition-all">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${directionBg} ${directionColor}`}>
-                        {directionIcon}
-                        <span className="font-medium">{signal.direction === 1 ? 'YES' : signal.direction === -1 ? 'NO' : 'NEUTRAL'}</span>
+                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-yellow-500/10 border-yellow-500/30 text-yellow-500`}>
+                        <Activity className="w-4 h-4" />
+                        <span className="font-medium">CONFIDENCE ANOMALY</span>
                     </div>
                     <div>
-                        <div className="text-sm text-gray-400">Analyst: <span className="text-white font-mono">{signal.analyst}</span></div>
+                        <div className="text-sm text-gray-400">Source: <span className="text-white font-mono">Pyth Network</span></div>
                         <div className="flex gap-4 mt-1">
-                            <span className="text-xs text-gray-500">Confidence: <span className="text-blue-400 font-medium">{signal.confidence}%</span></span>
-                            <span className="text-xs text-gray-500">Z-Score: <span className="text-purple-400 font-medium">{signal.zScore.toFixed(2)}</span></span>
+                            <span className="text-xs text-gray-500">Confidence: <span className="text-blue-400 font-medium">{signal.confidence.toFixed(4)}</span></span>
+                            <span className="text-xs text-gray-500">Price: <span className="text-purple-400 font-medium">${signal.price}</span></span>
                         </div>
                     </div>
-                </div>
-                <div className="flex items-center gap-3">
-                    {signal.isPurchased ? (
-                        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500/20 border border-green-500/30 text-green-400">
-                            <Unlock className="w-4 h-4" />
-                            <span className="font-medium">Unlocked</span>
-                        </div>
-                    ) : signal.price > 0 ? (
-                        <button className="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium transition-all flex items-center gap-2">
-                            <Lock className="w-4 h-4" />
-                            Unlock for {signal.price} USDC
-                        </button>
-                    ) : (
-                        <div className="px-4 py-2 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-400 font-medium">
-                            Free Signal
-                        </div>
-                    )}
                 </div>
             </div>
         </div>
