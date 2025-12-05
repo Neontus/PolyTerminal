@@ -1,45 +1,44 @@
 import { Trophy, TrendingUp, DollarSign, Target } from 'lucide-react';
-
-const mockAnalysts = [
-    {
-        pubkey: '7xKXp9qZ...mN4vRt2k',
-        totalSignals: 45,
-        resolvedSignals: 38,
-        correctSignals: 32,
-        accuracy: 84.2,
-        totalEarnings: 1250.5,
-        rank: 1,
-    },
-    {
-        pubkey: '9bRt5xWq...Lp3hKm8j',
-        totalSignals: 38,
-        resolvedSignals: 35,
-        correctSignals: 28,
-        accuracy: 80.0,
-        totalEarnings: 980.25,
-        rank: 2,
-    },
-    {
-        pubkey: '4mNv2kLp...Qz7xRw9b',
-        totalSignals: 52,
-        resolvedSignals: 42,
-        correctSignals: 31,
-        accuracy: 73.8,
-        totalEarnings: 1450.75,
-        rank: 3,
-    },
-    {
-        pubkey: '2hKm8jQz...Rt5xWq9b',
-        totalSignals: 28,
-        resolvedSignals: 24,
-        correctSignals: 19,
-        accuracy: 79.2,
-        totalEarnings: 650.0,
-        rank: 4,
-    },
-];
+import { useWhaleTraders } from '../hooks/useWhaleTraders';
 
 export default function AnalystLeaderboard() {
+    const { traders, loading, error } = useWhaleTraders();
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-white">Loading whale traders...</div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-red-400">{error}</div>
+            </div>
+        );
+    }
+
+    if (traders.length === 0) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-gray-400">No whale traders found. Add some via Solana Playground!</div>
+            </div>
+        );
+    }
+
+    // Transform traders to match the component's expected format
+    const analysts = traders.map((trader, index) => ({
+        pubkey: trader.walletAddress,
+        totalSignals: trader.totalTrades,
+        resolvedSignals: trader.totalTrades,
+        correctSignals: trader.winningTrades,
+        accuracy: trader.winRate,
+        totalEarnings: trader.totalVolume / 1000000, // Convert to display format
+        rank: index + 1,
+    }));
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -58,22 +57,22 @@ export default function AnalystLeaderboard() {
 
             {/* Top 3 Podium */}
             <div className="grid grid-cols-3 gap-4 mb-8">
-                {mockAnalysts.slice(0, 3).map((analyst, index) => (
+                {analysts.slice(0, 3).map((analyst, index) => (
                     <div
                         key={analyst.pubkey}
                         className={`relative bg-gradient-to-br ${index === 0
-                                ? 'from-yellow-500/20 to-yellow-600/20 border-yellow-500/50'
-                                : index === 1
-                                    ? 'from-gray-400/20 to-gray-500/20 border-gray-400/50'
-                                    : 'from-orange-500/20 to-orange-600/20 border-orange-500/50'
+                            ? 'from-yellow-500/20 to-yellow-600/20 border-yellow-500/50'
+                            : index === 1
+                                ? 'from-gray-400/20 to-gray-500/20 border-gray-400/50'
+                                : 'from-orange-500/20 to-orange-600/20 border-orange-500/50'
                             } border rounded-2xl p-6 backdrop-blur-sm`}
                     >
                         <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                             <div className={`w-12 h-12 rounded-full flex items-center justify-center ${index === 0
-                                    ? 'bg-gradient-to-br from-yellow-400 to-yellow-600'
-                                    : index === 1
-                                        ? 'bg-gradient-to-br from-gray-300 to-gray-500'
-                                        : 'bg-gradient-to-br from-orange-400 to-orange-600'
+                                ? 'bg-gradient-to-br from-yellow-400 to-yellow-600'
+                                : index === 1
+                                    ? 'bg-gradient-to-br from-gray-300 to-gray-500'
+                                    : 'bg-gradient-to-br from-orange-400 to-orange-600'
                                 }`}>
                                 <Trophy className="w-6 h-6 text-white" />
                             </div>
@@ -126,7 +125,7 @@ export default function AnalystLeaderboard() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
-                            {mockAnalysts.map((analyst) => (
+                            {analysts.map((analyst) => (
                                 <tr key={analyst.pubkey} className="hover:bg-white/5 transition-colors">
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="text-lg font-bold text-white">#{analyst.rank}</div>

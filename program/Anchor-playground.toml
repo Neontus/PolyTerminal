@@ -1,0 +1,8 @@
+[workspace]
+
+[programs.devnet]
+prediction_copilot = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+
+[provider]
+cluster = "Devnet"
+wallet = "~/.config/solana/id.json"
