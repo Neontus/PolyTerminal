@@ -1,0 +1,30 @@
+{
+  "name": "prediction-copilot-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prediction Copilot - Solana-native prediction market intelligence platform",
+  "scripts": {
+    "dev": "pnpm run --parallel --filter './apps/*' dev",
+    "build": "pnpm run --recursive build",
+    "test": "pnpm run --recursive test",
+    "lint": "pnpm run --recursive lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "program:build": "cd program && anchor build",
+    "program:test": "cd program && anchor test",
+    "program:deploy": "cd program && anchor deploy --provider.cluster devnet",
+    "sync-idl": "bash scripts/sync-idl.sh",
+    "setup": "bash scripts/setup-env.sh",
+    "deploy:devnet": "bash scripts/deploy-devnet.sh",
+    "clean": "pnpm run --recursive clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "prettier": "^3.1.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0"
+}
