@@ -95,8 +95,8 @@ export function usePythSignals() {
               const assetBytes = data.asset;
               const marketId = new TextDecoder().decode(new Uint8Array(assetBytes as number[])).replace(/\0/g, '');
               
-              // Get severity (0=Low, 1=High, 2=Critical)
-              const severityNames: ('Low' | 'High' | 'Critical')[] = ['Low', 'High', 'Critical'];
+              // Get severity (0=Low, 1=Medium, 2=High)
+              const severityNames: ('Low' | 'Medium' | 'High')[] = ['Low', 'Medium', 'High'];
               const severity = severityNames[data.severity] || 'Low';
               
               signalsData.push({

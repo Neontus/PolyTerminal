@@ -4,7 +4,7 @@
   "private": true,
   "description": "Prediction Copilot - Solana-native prediction market intelligence platform",
   "scripts": {
-    "dev": "pnpm run --parallel --filter './apps/*' dev",
+    "dev": "pnpm run --parallel --filter 'frontend' --filter 'backend' dev",
     "build": "pnpm run --recursive build",
     "test": "pnpm run --recursive test",
     "lint": "pnpm run --recursive lint",

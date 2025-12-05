@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, Clock, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import { usePythSignals } from '../hooks/usePythSignals';
 
 export default function SignalList() {
@@ -70,10 +70,9 @@ export default function SignalList() {
                             <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-3">
                                     {/* Severity Badge */}
-                                    <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${signal.severity === 'Critical' ? 'bg-red-500/20 text-red-300 border border-red-500/30' :
-                                            signal.severity === 'High' ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' :
-                                                signal.severity === 'Medium' ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :
-                                                    'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                                    <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${signal.severity === 'High' ? 'bg-red-500/20 text-red-300 border border-red-500/30' :
+                                        signal.severity === 'Medium' ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' :
+                                            'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                                         }`}>
                                         <AlertTriangle className="w-3 h-3" />
                                         {signal.severity}
@@ -88,8 +87,8 @@ export default function SignalList() {
                                 </div>
                             </div>
                             <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${signal.confidence < 90
-                                    ? 'bg-red-500/10 border-red-500/30 text-red-400'
-                                    : 'bg-green-500/10 border-green-500/30 text-green-400'
+                                ? 'bg-red-500/10 border-red-500/30 text-red-400'
+                                : 'bg-green-500/10 border-green-500/30 text-green-400'
                                 }`}>
                                 {signal.confidence < 90 ? <TrendingDown className="w-5 h-5" /> : <TrendingUp className="w-5 h-5" />}
                                 <span className="font-bold text-lg">{signal.confidence}%</span>
@@ -100,10 +99,9 @@ export default function SignalList() {
                             <MetricCard label="Confidence" value={`${signal.confidence}%`} color="text-blue-400" />
                             <MetricCard label="Market" value={signal.marketQuestion.split('-')[0].trim()} color="text-purple-400" />
                             <MetricCard label="Severity" value={signal.severity} color={
-                                signal.severity === 'Critical' ? 'text-red-400' :
-                                    signal.severity === 'High' ? 'text-orange-400' :
-                                        signal.severity === 'Medium' ? 'text-yellow-400' :
-                                            'text-blue-400'
+                                signal.severity === 'High' ? 'text-red-400' :
+                                    signal.severity === 'Medium' ? 'text-orange-400' :
+                                        'text-blue-400'
                             } />
                             <MetricCard label="Status" value="Active" color="text-green-400" />
                         </div>

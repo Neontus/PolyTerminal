@@ -40,9 +40,8 @@ Built for the MBC Hackathon targeting Solana + Polymarket + Circle/USDC bounties
 
 ```
 PolyTerminal/
-├── apps/
-│   ├── frontend/          # React application
-│   └── backend/           # Node.js API + Indexer
+├── frontend/          # React application
+├── backend/           # Node.js API + Indexer
 ├── packages/
 │   ├── anchor-client/     # Generated Anchor types & client
 │   ├── constants/         # Shared constants
@@ -68,14 +67,14 @@ PolyTerminal/
 pnpm install
 
 # Install frontend dependencies only
-cd apps/frontend && npm install
+cd frontend && npm install
 ```
 
 ### Running the Frontend
 
 ```bash
 # From project root
-cd apps/frontend
+cd frontend
 npm run dev
 ```
 
@@ -96,7 +95,7 @@ This will start:
 
 #### Frontend (.env)
 ```bash
-cd apps/frontend
+cd frontend
 cp .env.example .env
 # Edit .env with your values
 ```
@@ -109,7 +108,7 @@ Required variables:
 
 #### Backend (.env)
 ```bash
-cd apps/backend
+cd backend
 cp .env.example .env
 # Edit .env with your values
 ```
@@ -125,7 +124,7 @@ Required variables:
 ### Frontend Development
 
 ```bash
-cd apps/frontend
+cd frontend
 npm run dev          # Start dev server
 npm run build        # Production build
 npm run preview      # Preview production build
@@ -134,7 +133,7 @@ npm run preview      # Preview production build
 ### Backend Development (when implemented)
 
 ```bash
-cd apps/backend
+cd backend
 npm run dev          # Start API server
 npm run indexer      # Start event indexer
 npm run db:migrate   # Run database migrations
@@ -152,8 +151,8 @@ anchor deploy        # Deploy to configured cluster
 ## 📚 Documentation
 
 - [Root CLAUDE.md](./CLAUDE.md) - Complete project documentation
-- [Frontend CLAUDE.md](./apps/frontend/CLAUDE.md) - Frontend architecture
-- [Backend CLAUDE.md](./apps/backend/CLAUDE.md) - Backend architecture
+- [Frontend CLAUDE.md](./frontend/CLAUDE.md) - Frontend architecture
+- [Backend CLAUDE.md](./backend/CLAUDE.md) - Backend architecture
 - [Program CLAUDE.md](./program/CLAUDE.md) - Anchor program details
 - [Implementation Plan](./docs/implementation_plan.md) - Detailed implementation roadmap
 
