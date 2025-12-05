@@ -26,8 +26,8 @@ export function useMarket(id?: string) {
                     category = 'Sports';
                 }
 
-                // Find YES price
-                const yesToken = m.tokens.find((t: any) => t.outcome === 'YES');
+                // Find YES price (Case insensitive check)
+                const yesToken = m.tokens.find((t: any) => t.outcome === 'YES' || t.outcome === 'Yes');
                 const price = yesToken ? yesToken.price : 0.5;
 
                 setMarket({

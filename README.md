@@ -1,224 +1,65 @@
-# Prediction Copilot
+# PolyTerminal
 
-> Solana-native prediction market intelligence platform powered by Polymarket data and Pyth oracles
+Welcome to **PolyTerminal**, a professional-grade trading interface for prediction markets.
 
-A decentralized marketplace for prediction signals where analysts can publish quantitative market analysis on-chain and monetize their insights through USDC-based access control.
+## Table of Contents
+1. [Project Description](#project-description)
+2. [Technical Summary](#technical-summary)
+   - [Architecture](#architecture)
+   - [Key Features](#key-features)
+3. [Setup & Installation](#setup--installation)
 
-## 🎯 Overview
+---
 
-Prediction Copilot combines three key layers:
+## Project Description
+PolyTerminal builds a bridge between the wild west of prediction markets and the sophisticated tooling of traditional finance. While platforms like Polymarket have revolutionized information trading, their interfaces often cater to casual betting rather than serious analysis. PolyTerminal is the answer for power users—a "Bloomberg Terminal" for the prediction economy.
 
-1. **Intelligence Layer** - Aggregates Polymarket data and computes quantitative signals (z-score, momentum, volatility)
-2. **Attestation Layer** - Records predictions on-chain with Pyth oracle price snapshots for immutable proof
-3. **Marketplace Layer** - USDC-based signal marketplace with on-chain access control
+It unifies real-time price action from Polymarket's CLOB, on-chain whale tracking from the Solana blockchain, and advanced technical analysis into a single, high-performance dashboard. Traders can visualize market trends with granular charts, detect volume anomalies, and track "smart money" movements in real-time. By treating outcome shares as financial assets with deep analytical needs, PolyTerminal empowers traders to make data-driven decisions in an increasingly complex market.
 
-Built for the MBC Hackathon targeting Solana + Polymarket + Circle/USDC bounties.
+---
 
-## 🏗️ Architecture
+## Technical Summary
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         Frontend                             │
-│              React + Vite + Tailwind CSS                     │
-│         Wallet Adapter + Anchor Client                       │
-└──────────────────┬──────────────────────────────────────────┘
-                   │
-                   ├─────────────────┬────────────────────────┐
-                   ▼                 ▼                        ▼
-         ┌─────────────────┐ ┌──────────────┐    ┌──────────────────┐
-         │  Solana Program │ │   Backend    │    │   Polymarket     │
-         │  (Anchor/Rust)  │ │  (Node.js)   │    │      API         │
-         │                 │ │              │    │                  │
-         │ • Analyst PDAs  │ │ • REST API   │    │ • Market Data    │
-         │ • Signal PDAs   │ │ • Indexer    │    │ • Price History  │
-         │ • USDC Payments │ │ • Signals    │    │                  │
-         │ • Pyth Oracle   │ │ • PostgreSQL │    │                  │
-         └─────────────────┘ └──────────────┘    └──────────────────┘
-```
+PolyTerminal is a modern, full-stack application architected for speed and data density.
 
-## 📦 Project Structure
+### Architecture
+*   **Frontend**: Built with **React**, **TypeScript**, and **Vite**, utilizing **Tailwind CSS** for a responsive, dark-mode-first UI. Data state is managed via custom hooks (`usePolymarket`, `useWhaleMovements`) that abstract complex polling and normalization logic.
+*   **Backend**: A **Node.js/Express** service acting as an intelligent aggregator. It unifies data from:
+    *   **Polymarket CLOB API**: For order book depth and real-time execution.
+    *   **Gamma API**: For market metadata and search.
+    *   **Pyth Oracles**: For high-fidelity off-chain price feeds.
+*   **Blockchain**: A custom **Solana** program (written in **Rust** using the **Anchor** framework) tracks "Whale" entities, allowing decentralized registration and monitoring of high-impact traders.
 
-```
-PolyTerminal/
-├── frontend/          # React application
-├── backend/           # Node.js API + Indexer
-├── packages/
-│   ├── anchor-client/     # Generated Anchor types & client
-│   ├── constants/         # Shared constants
-│   └── shared-types/      # TypeScript types
-└── program/               # Anchor program (Rust)
-    └── programs/
-        └── prediction-copilot/
-```
+### Key Features
+*   **Hybrid Data Fetching**: Seamlessly stitches together on-chain and off-chain data sources.
+*   **Advanced Charting**: Custom `Recharts` implementation supporting granular timeframes and technical overlays (RSI, MACD, Bollinger Bands).
+*   **Signal Engine**: Client-side analysis engine that computes technical indicators in real-time based on price history.
+*   **Whale Tracking**: Dedicated pipeline to monitor and display large-value transactions from known sophisticated actors.
 
-## 🚀 Quick Start
+---
+
+## Setup & Installation
 
 ### Prerequisites
+*   Node.js (v18+)
+*   pnpm
+*   Rust / Anchor (for smart contracts)
 
-- Node.js 18+ and pnpm
-- Rust and Anchor CLI (for contract development)
-- Solana CLI (for deployment)
-- PostgreSQL (for backend)
+### Running Locally
+1.  **Install Dependencies**
+    ```bash
+    pnpm install
+    ```
 
-### Installation
+2.  **Start Backend**
+    ```bash
+    pnpm --filter backend run dev
+    ```
 
-```bash
-# Install dependencies for all workspaces
-pnpm install
+3.  **Start Frontend**
+    ```bash
+    pnpm --filter frontend run dev
+    ```
 
-# Install frontend dependencies only
-cd frontend && npm install
-```
-
-### Running the Frontend
-
-```bash
-# From project root
-cd frontend
-npm run dev
-```
-
-The frontend will be available at `http://localhost:5173`
-
-### Running the Full Stack (when backend is ready)
-
-```bash
-# From project root
-pnpm run dev
-```
-
-This will start:
-- Frontend on `http://localhost:5173`
-- Backend API on `http://localhost:3001`
-
-### Environment Setup
-
-#### Frontend (.env)
-```bash
-cd frontend
-cp .env.example .env
-# Edit .env with your values
-```
-
-Required variables:
-- `VITE_SOLANA_RPC_URL` - Solana RPC endpoint (devnet)
-- `VITE_PROGRAM_ID` - Deployed Anchor program ID
-- `VITE_USDC_MINT` - USDC mint address
-- `VITE_API_URL` - Backend API URL
-
-#### Backend (.env)
-```bash
-cd backend
-cp .env.example .env
-# Edit .env with your values
-```
-
-Required variables:
-- `SOLANA_RPC_URL` - Solana RPC endpoint
-- `PROGRAM_ID` - Deployed Anchor program ID
-- `DATABASE_URL` - PostgreSQL connection string
-- `POLYMARKET_API_URL` - Polymarket API base URL
-
-## 🔧 Development
-
-### Frontend Development
-
-```bash
-cd frontend
-npm run dev          # Start dev server
-npm run build        # Production build
-npm run preview      # Preview production build
-```
-
-### Backend Development (when implemented)
-
-```bash
-cd backend
-npm run dev          # Start API server
-npm run indexer      # Start event indexer
-npm run db:migrate   # Run database migrations
-```
-
-### Anchor Program Development (when implemented)
-
-```bash
-cd program
-anchor build         # Compile program
-anchor test          # Run tests
-anchor deploy        # Deploy to configured cluster
-```
-
-## 📚 Documentation
-
-- [Root CLAUDE.md](./CLAUDE.md) - Complete project documentation
-- [Frontend CLAUDE.md](./frontend/CLAUDE.md) - Frontend architecture
-- [Backend CLAUDE.md](./backend/CLAUDE.md) - Backend architecture
-- [Program CLAUDE.md](./program/CLAUDE.md) - Anchor program details
-- [Implementation Plan](./docs/implementation_plan.md) - Detailed implementation roadmap
-
-## 🎨 Features
-
-### Current (Frontend MVP)
-- ✅ Market browsing interface
-- ✅ Signal list with metrics display
-- ✅ Analyst leaderboard
-- ✅ Wallet connection (Solana)
-- ✅ Premium dark theme UI
-
-### Planned
-- ⏳ On-chain signal publishing
-- ⏳ USDC-based signal marketplace
-- ⏳ Pyth oracle price verification
-- ⏳ Real-time event indexing
-- ⏳ Signal computation (z-score, momentum, volatility)
-- ⏳ Polymarket data integration
-
-## 🛠️ Tech Stack
-
-**Frontend:**
-- React 19 + TypeScript
-- Vite
-- Tailwind CSS
-- Solana Wallet Adapter
-- TanStack Query
-
-**Backend:**
-- Node.js + TypeScript
-- Express
-- PostgreSQL
-- WebSocket
-
-**Blockchain:**
-- Solana (Devnet)
-- Anchor Framework
-- Pyth Network
-- SPL Token (USDC)
-
-**External APIs:**
-- Polymarket CLOB API
-
-## 📝 Current Status
-
-**Project Completion: ~25%**
-
-- ✅ Frontend UI (90%)
-- ⏳ Anchor Program (0% - planned)
-- ⏳ Backend Services (0% - planned)
-- ⏳ Integration (0%)
-
-See [implementation_plan.md](./docs/implementation_plan.md) for detailed roadmap.
-
-## 🤝 Contributing
-
-This is a hackathon project. For development guidelines, see the CLAUDE.md files in each component directory.
-
-## 📄 License
-
-MIT
-
-## 🔗 Links
-
-- [Solana Docs](https://docs.solana.com/)
-- [Anchor Framework](https://www.anchor-lang.com/)
-- [Pyth Network](https://pyth.network/)
-- [Polymarket](https://polymarket.com/)
+4.  **Open Browser**
+    Navigate to `http://localhost:5173` to launch the terminal.

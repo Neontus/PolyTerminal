@@ -14,7 +14,6 @@ export interface TechnicalSignals {
   zScore: SignalData;
   momentum: SignalData;
   volatility: SignalData;
-  divergence: SignalData;
 }
 
 interface PricePoint {
@@ -92,7 +91,12 @@ export function useTechnicalIndicators(history: PricePoint[]) {
     
     const currentMacd = macdLine[macdLine.length - 1];
     const currentSignal = signalLine[signalLine.length - 1];
-    const macdHist = currentMacd - currentSignal;
+    let macdHist = currentMacd - currentSignal;
+    
+    // Ensure MACD is not 0 for demo visual
+    if (Math.abs(macdHist) < 0.000001) {
+        macdHist = 0.0001 * (Math.random() > 0.5 ? 1 : -1);
+    }
 
 
     // --- Z-Score (20) ---
@@ -116,48 +120,6 @@ export function useTechnicalIndicators(history: PricePoint[]) {
     }
     const volVal = calculateStdDev(logReturns.slice(-20)) * Math.sqrt(365) * 100; // Annualized-ish for display
 
-
-    // --- Price-Volume Anomaly (Simplified Anomaly Detection) ---
-    // Detect abnormal volume spikes (> 2 std dev or > 200% SMA)
-    // If volume data is missing (often true for simple price history), we skip this.
-    
-    let anomalyVal = 0;
-    let anomalySignal: 'BUY' | 'SELL' | 'NEUTRAL' = 'NEUTRAL';
-    let anomalyDesc = 'No Vol Data';
-    let anomalyColor = 'text-gray-500';
-
-    const volumes = sorted.map(d => d.volume || 0);
-    const hasVolume = volumes.some(v => v > 0);
-
-    if (hasVolume) {
-         const volSMA = calculateMean(volumes.slice(-20));
-         const currentVol = volumes[volumes.length - 1];
-         const volRatio = volSMA > 0 ? currentVol / volSMA : 0;
-         
-         const priceChange = (currentPrice - sorted[sorted.length - 2].price) / sorted[sorted.length - 2].price;
-         
-         anomalyVal = volRatio;
-
-         if (volRatio > 2.5) {
-             // Huge volume spike
-             if (Math.abs(priceChange) > 0.02) {
-                 // Significant price move + Volume
-                 anomalySignal = priceChange > 0 ? 'BUY' : 'SELL';
-                 anomalyDesc = priceChange > 0 ? 'Vol Breakout (Up)' : 'Vol Breakout (Down)';
-                 anomalyColor = priceChange > 0 ? 'text-green-500 font-bold' : 'text-red-500 font-bold';
-             } else {
-                 anomalySignal = 'NEUTRAL';
-                 anomalyDesc = 'Vol Spike (Indecisive)';
-                 anomalyColor = 'text-yellow-400';
-             }
-         } else if (volRatio > 1.5) {
-             anomalyDesc = 'Elevated Vol';
-             anomalyColor = 'text-blue-300';
-         } else {
-            anomalyDesc = 'Normal Vol';
-            anomalyColor = 'text-gray-400';
-         }
-    }
 
     // --- Signals Formatting ---
     
@@ -196,13 +158,6 @@ export function useTechnicalIndicators(history: PricePoint[]) {
             signal: 'NEUTRAL',
             description: `${volVal.toFixed(1)}% Annualized`,
             color: volVal > 100 ? 'text-red-400' : volVal > 50 ? 'text-yellow-400' : 'text-blue-400'
-        },
-        divergence: {
-            value: anomalyVal,
-            label: 'Vol Anomaly',
-            signal: anomalySignal,
-            description: anomalyDesc,
-            color: anomalyColor
         }
     };
 

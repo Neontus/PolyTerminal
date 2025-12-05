@@ -11,8 +11,7 @@ export default function TechnicalSignalsDisplay({ signals }: TechnicalSignalsPro
         { key: 'macd', icon: BarChart2 },
         { key: 'zScore', icon: Zap },
         { key: 'momentum', icon: TrendingUp },
-        { key: 'volatility', icon: AlertTriangle },
-        { key: 'divergence', icon: Activity } // Using Activity as placeholder for Anomaly
+        { key: 'volatility', icon: AlertTriangle }
     ];
 
     return (

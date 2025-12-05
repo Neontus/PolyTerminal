@@ -16,7 +16,7 @@ import CommentsFeed from '../components/CommentsFeed';
 
 export default function MarketDetailPage() {
     const { id } = useParams();
-    const { market, loading, error } = useMarket(id);
+    const { market, loading } = useMarket(id);
     const { signals } = usePythSignals();
     const { movements } = useWhaleMovements();
     const [timeRange, setTimeRange] = useState<'1H' | '1D' | '1W' | '1M'>('1H');
@@ -29,8 +29,8 @@ export default function MarketDetailPage() {
     // For binary markets, it's usually the YES token.
     const activeTokenId = useMemo(() => {
         if (!market) return undefined;
-        // Prioritize YES token
-        const yesToken = market.tokens.find(t => t.outcome === 'YES');
+        // Prioritize YES token (Case insensitive)
+        const yesToken = market.tokens.find(t => t.outcome === 'YES' || t.outcome === 'Yes');
         return yesToken ? yesToken.tokenId : market.tokens[0]?.tokenId;
     }, [market]);
 

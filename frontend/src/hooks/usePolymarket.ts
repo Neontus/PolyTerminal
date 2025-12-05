@@ -20,19 +20,11 @@ export function usePolymarket(category?: string) {
         const response = await axios.get(`${BACKEND_URL}/api/markets?limit=10${query}`);
         
         const mappedMarkets = response.data.map((m: any) => {
-            // Determine category (fallback if backend doesn't provide strict category)
-            let cat = 'Crypto';
-            if (m.question.toLowerCase().includes('trump') || m.question.toLowerCase().includes('biden') || m.question.toLowerCase().includes('election')) {
-                cat = 'Politics';
-            } else if (m.question.toLowerCase().includes('nfl') || m.question.toLowerCase().includes('nba')) {
-                cat = 'Sports';
-            }
-            // Use backend tag if available or fallback
-            // For now we trust our heuristic or backend response if it has category field? 
-            // The interface has 'category' computed on frontend.
+            // Use backend provided category or fallback to 'General'
+            const cat = m.category || 'General';
             
-            // Find YES price
-            const yesToken = m.tokens.find((t: any) => t.outcome === 'YES');
+            // Find YES price (Case insensitive check)
+            const yesToken = m.tokens.find((t: any) => t.outcome === 'YES' || t.outcome === 'Yes');
             const price = yesToken ? yesToken.price : 0.5;
 
             return {

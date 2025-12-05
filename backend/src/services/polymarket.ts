@@ -16,6 +16,7 @@ export interface PolymarketMarket {
     endDate: string;
     active: boolean;
     eventId?: string;
+    category?: string;
     // Optional for UI enrichment
     signals?: any[];
     movements?: any[];
@@ -49,9 +50,6 @@ export class PolymarketService {
     private ws?: WebSocket;
     private wsPingInterval?: NodeJS.Timeout;
 
-    /**
-     * Connect to Polymarket CLOB WebSocket
-     */
     /**
      * Connect to Polymarket CLOB WebSocket
      */
@@ -176,7 +174,7 @@ export class PolymarketService {
                 limit,
                 active: true,
                 closed: false,
-                order: 'createdAt',
+                order: 'volume',
                 ascending: false
             };
 
@@ -226,6 +224,14 @@ export class PolymarketService {
                     outcome: outcome,
                     winner: false
                 }));
+                
+                // Determine Category
+                let marketCategory = 'General';
+                if (event.tags && Array.isArray(event.tags) && event.tags.length > 0) {
+                    // Try to pick the first meaningful tag that is not "ID" or "All"
+                    const tag = event.tags.find((t: any) => t.label !== 'All');
+                    if (tag) marketCategory = tag.label;
+                }
 
                 markets.push({
                     id: m.conditionId, // Use conditionId as unique ID
@@ -235,7 +241,8 @@ export class PolymarketService {
                     volume: m.liquidity ? parseFloat(m.liquidity) : 0, // Gamma uses liquidity or volume
                     tokens: tokens,
                     endDate: m.endDate,
-                    active: m.active
+                    active: m.active,
+                    category: marketCategory
                 });
             }
 
@@ -270,33 +277,63 @@ export class PolymarketService {
                 if (cached) return cached;
             }
 
-            // Fetch from CLOB API
-            // content-type: application/json
-            const response = await axios.get(`${CLOB_API_URL}/markets/${id}`);
-            const m = response.data;
+            // 1. Fetch from CLOB API to validate ID and get slug
+            const clobResponse = await axios.get(`${CLOB_API_URL}/markets/${id}`);
+            const clobMarket = clobResponse.data;
 
-            if (!m) return null;
+            if (!clobMarket) return null;
+
+            // 2. Use slug to fetch from Gamma API to get eventId and rich metadata
+            // Gamma API filtering by slug: /events?slug=...
+            let gammaMarket: any = null;
+            let eventId: string | undefined = undefined;
+            
+            if (clobMarket.market_slug) {
+                try {
+                    const gammaResponse = await axios.get(`${GRAPH_API_URL}`, {
+                        params: { slug: clobMarket.market_slug }
+                    });
+                    
+                    const events = Array.isArray(gammaResponse.data) ? gammaResponse.data : [];
+                    if (events.length > 0) {
+                        const event = events[0];
+                        eventId = event.id;
+                        // Find the specific market in the event
+                        gammaMarket = event.markets.find((m: any) => m.conditionId === id);
+                    }
+                } catch (e) {
+                    console.warn(`Failed to fetch Gamma metadata for slug ${clobMarket.market_slug}`, e);
+                }
+            }
+
+            // 3. Merge Data (Prioritize Gamma for volume/prices if available, CLOB for basics)
+            let volume = 0;
+            let tokens = (clobMarket.tokens || []).map((t: any) => ({
+                tokenId: t.token_id,
+                price: t.price,
+                outcome: t.outcome,
+                winner: t.winner
+            }));
+
+            if (gammaMarket) {
+                 volume = gammaMarket.liquidity ? parseFloat(gammaMarket.liquidity) : 0;
+                 // Ideally we could parse Gamma prices too if we trusted them more, 
+                 // but CLOB prices are likely more real-time for the single market view.
+            }
 
             return {
-                id: m.condition_id,
-                question: m.question,
-                slug: m.market_slug,
-                volume: 0, // CLOB API single market endpoint doesn't return volume
-                endDate: m.end_date_iso,
-                active: m.active,
-                // eventId is not provided in CLOB response. 
-                // Comments might not load correctly without it if strict filtering is on.
-                eventId: undefined, 
-                tokens: (m.tokens || []).map((t: any) => ({
-                    tokenId: t.token_id,
-                    price: t.price,
-                    outcome: t.outcome,
-                    winner: t.winner
-                }))
+                id: clobMarket.condition_id,
+                question: clobMarket.question,
+                slug: clobMarket.market_slug,
+                volume: volume,
+                endDate: clobMarket.end_date_iso,
+                active: clobMarket.active,
+                eventId: eventId, // Critical for comments
+                tokens: tokens
             };
 
         } catch (error) {
-            console.error(`Error fetching individual market ${id} from CLOB:`, error);
+            console.error(`Error fetching individual market ${id}:`, error);
             return null;
         }
     }

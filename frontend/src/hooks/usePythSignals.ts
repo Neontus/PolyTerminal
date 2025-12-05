@@ -41,6 +41,7 @@ export function usePythSignals() {
         }));
         
         // Sort by timestamp (newest first)
+        // Sort by timestamp (newest first)
         signalsData.sort((a, b) => b.timestamp - a.timestamp);
         
         setSignals(signalsData);

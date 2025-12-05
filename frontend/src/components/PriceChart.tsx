@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine, Area, AreaChart } from 'recharts';
+import { ResponsiveContainer, Tooltip, XAxis, YAxis, Area, AreaChart } from 'recharts';
 
 interface PriceChartProps {
     currentPrice: number; // 0.0 to 1.0
@@ -8,7 +8,7 @@ interface PriceChartProps {
     historyOverride?: { time: number; price: number }[];
 }
 
-export default function PriceChart({ currentPrice, timeRange, color = '#22c55e', historyOverride }: PriceChartProps) {
+export default function PriceChart({ currentPrice, timeRange, historyOverride }: PriceChartProps) {
 
     // Generate realistic looking mock history based on current price and time range
     const data = useMemo(() => {
@@ -22,7 +22,7 @@ export default function PriceChart({ currentPrice, timeRange, color = '#22c55e',
         let price = currentPrice;
 
         // Volatility based on time range (scaled down for more points)
-        let volatility = 0.005;
+        let volatility = 0.005 * (0.8 + Math.random() * 0.4); // Randomize slightly per chart render if re-mounting
         let timeStep = 1000 * 60;
 
         switch (timeRange) {
@@ -32,7 +32,7 @@ export default function PriceChart({ currentPrice, timeRange, color = '#22c55e',
             case '1M': timeStep = 1000 * 60 * 60 * 5; volatility = 0.05; break;
         }
 
-        // Generate backwards
+        // Generate backwards from current price
         for (let i = 0; i < points; i++) {
             history.unshift({
                 time: now - (i * timeStep),
@@ -40,9 +40,10 @@ export default function PriceChart({ currentPrice, timeRange, color = '#22c55e',
             });
             // Random walk with mean reversion tendency to keep it somewhat centered
             const change = (Math.random() - 0.5) * volatility;
-            price = price * (1 + change);
+            price = price * (1 - change); // Reverse: previous price led to current
+
             // Clamp
-            price = Math.max(0.01, Math.min(0.99, price));
+            price = Math.max(0.001, Math.min(0.999, price));
         }
         return history;
     }, [currentPrice, timeRange, historyOverride]);
