@@ -1,5 +1,6 @@
 import { TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import { usePythSignals } from '../hooks/usePythSignals';
+import ConfidenceMeter from './ConfidenceMeter';
 
 export default function SignalList() {
     const { signals, loading, error } = usePythSignals();
@@ -86,13 +87,8 @@ export default function SignalList() {
                                     Source: <span className="text-white font-mono">{signal.analyst}</span>
                                 </div>
                             </div>
-                            <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${signal.confidence < 90
-                                ? 'bg-red-500/10 border-red-500/30 text-red-400'
-                                : 'bg-green-500/10 border-green-500/30 text-green-400'
-                                }`}>
-                                {signal.confidence < 90 ? <TrendingDown className="w-5 h-5" /> : <TrendingUp className="w-5 h-5" />}
-                                <span className="font-bold text-lg">{signal.confidence}%</span>
-                            </div>
+                            <ConfidenceMeter confidence={signal.confidence} />
+
                         </div>
 
                         <div className="grid grid-cols-4 gap-4 p-4 bg-black/30 rounded-xl border border-white/5">
@@ -117,7 +113,7 @@ export default function SignalList() {
                     </div>
                 ))}
             </div>
-        </div>
+        </div >
     );
 }
 

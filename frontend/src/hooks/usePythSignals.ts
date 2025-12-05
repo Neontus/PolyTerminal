@@ -12,6 +12,8 @@ export interface PythSignal {
   timestamp: number;
   price: number;
   multiplier: number;
+  history: { timestamp: number; confidence: number; price: number }[];
+  isAnomaly: boolean;
 }
 
 export function usePythSignals() {
@@ -33,7 +35,9 @@ export function usePythSignals() {
             severity: s.severity,
             timestamp: s.timestamp,
             price: s.price,
-            multiplier: 0 // Not relevant for this view
+            multiplier: 0, // Not relevant for this view
+            history: s.history || [],
+            isAnomaly: s.isAnomaly || false
         }));
         
         // Sort by timestamp (newest first)
@@ -53,7 +57,7 @@ export function usePythSignals() {
     fetchSignals();
     
     // Refresh every 15 seconds
-    const interval = setInterval(fetchSignals, 15000);
+    const interval = setInterval(fetchSignals, 3000);
     return () => clearInterval(interval);
   }, []);
 

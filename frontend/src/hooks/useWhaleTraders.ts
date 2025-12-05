@@ -4,6 +4,7 @@ import { PublicKey } from '@solana/web3.js';
 import * as anchor from '@coral-xyz/anchor';
 import idl from '../idl/idl.json';
 
+
 const PROGRAM_ID = new PublicKey(import.meta.env.VITE_PROGRAM_ID || 'EFTzno3x2oUc2QhVEQRupcx8FLTWiN7bNc1RvgNu621D');
 
 export interface WhaleTrader {

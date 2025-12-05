@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { TrendingUp, TrendingDown, Minus, Lock, Unlock, Activity, ExternalLink, Plus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { TrendingUp, Activity, Plus, ChevronRight, BarChart2, AlertCircle } from 'lucide-react';
 import { usePolymarket } from '../hooks/usePolymarket';
 import { usePythSignals } from '../hooks/usePythSignals';
 import { useWhaleMovements } from '../hooks/useWhaleMovements';
@@ -8,7 +9,7 @@ import axios from 'axios';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export default function MarketList() {
-    const [selectedMarket, setSelectedMarket] = useState<string | null>(null);
+    const navigate = useNavigate();
     const { markets, loading: marketsLoading } = usePolymarket();
     const { signals } = usePythSignals();
     const { movements } = useWhaleMovements();
@@ -22,7 +23,7 @@ export default function MarketList() {
         if (!whaleInput) return;
         try {
             await axios.post(`${API_URL}/api/config/whales`, {
-                addresses: [whaleInput] // In a real app we'd merge, here we just push single for demo
+                addresses: [whaleInput]
             });
             setWhaleInput('');
             setConfigStatus('success');
@@ -36,11 +37,8 @@ export default function MarketList() {
     // Combine data
     const enrichedMarkets = useMemo(() => {
         return markets.map(market => {
-            // Find related Pyth signals
-            // Simple keyword matching for hackathon
             const marketSignals = signals.filter(s => {
-                const keyword = s.marketId.split('/')[0]; // e.g. BTC from BTC/USD
-                // Map common symbols to words found in questions
+                const keyword = s.marketId.split('/')[0];
                 const mappings: Record<string, string[]> = {
                     'BTC': ['Bitcoin', 'BTC'],
                     'ETH': ['Ethereum', 'Ether', 'ETH'],
@@ -50,11 +48,6 @@ export default function MarketList() {
                 return keywords.some(k => market.question.includes(k));
             });
 
-            // Find related movements (mock movements have 'marketId' that currently won't match real Gamma IDs easily)
-            // But for demo our movements are generated with random market names.
-            // Let's just blindly attach "recent movements" to the top markets to simulate activity for the demo.
-            // Or better: filter movements that match the question string if we updated the generator.
-            // Generator makes questions like "Will Bitcoin..." so string match works.
             const marketMovements = movements.filter(m =>
                 market.question.includes(m.marketQuestion.substring(0, 10))
             );
@@ -72,40 +65,50 @@ export default function MarketList() {
         : enrichedMarkets.filter(m => m.category === filter);
 
     if (marketsLoading) {
-        return <div className="text-white text-center py-20">Loading Markets...</div>;
+        return (
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                <div className="text-gray-400">Loading Markets...</div>
+            </div>
+        );
     }
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            {/* Dashboard Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-3xl font-bold text-white">Live Markets</h2>
-                    <p className="text-gray-400 mt-1">Browse prediction markets with AI-powered signals</p>
+                    <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                        <BarChart2 className="w-6 h-6 text-blue-400" />
+                        Market Dashboard
+                    </h2>
+                    <p className="text-sm text-gray-400 mt-1">Real-time prices and anomaly detection</p>
                 </div>
+
                 <div className="flex gap-4 items-center">
                     {/* Whale Config Input */}
-                    <div className="hidden md:flex items-center gap-2 bg-white/5 rounded-xl px-3 py-2 border border-white/10">
+                    <div className="hidden md:flex items-center gap-2 bg-white/5 rounded-lg px-3 py-1.5 border border-white/10 hover:border-white/20 transition-colors">
                         <input
                             type="text"
                             placeholder="Track Address..."
                             value={whaleInput}
                             onChange={(e) => setWhaleInput(e.target.value)}
-                            className="bg-transparent border-none focus:outline-none text-sm text-white w-32 placeholder-gray-500"
+                            className="bg-transparent border-none focus:outline-none text-xs text-white w-32 placeholder-gray-500"
                         />
                         <button
                             onClick={handleAddWhale}
-                            className="p-1 hover:bg-white/10 rounded-lg transition-colors text-blue-400"
+                            className="p-1 hover:bg-white/10 rounded transition-colors text-blue-400"
                             title="Add to Tracker"
                         >
-                            <Plus className="w-4 h-4" />
+                            <Plus className="w-3 h-3" />
                         </button>
-                        {configStatus === 'success' && <span className="text-xs text-green-400">Added!</span>}
+                        {configStatus === 'success' && <span className="text-[10px] text-green-400">Added!</span>}
                     </div>
 
                     <select
                         value={filter}
                         onChange={(e) => setFilter(e.target.value)}
-                        className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
                         <option>All Categories</option>
                         <option>Crypto</option>
@@ -115,146 +118,83 @@ export default function MarketList() {
                 </div>
             </div>
 
-            <div className="grid gap-4">
-                {filteredMarkets.map((market) => (
-                    <div
-                        key={market.id}
-                        className="bg-gradient-to-br from-slate-900/80 to-slate-800/80 border border-white/10 rounded-2xl p-6 hover:border-blue-500/50 transition-all duration-200 backdrop-blur-sm"
-                    >
-                        <div className="flex items-start justify-between mb-4">
-                            <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2">
-                                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                                        {market.category}
-                                    </span>
-                                    <span className="text-gray-400 text-sm">
-                                        ${(market.volume / 1000).toFixed(0)}k volume
-                                    </span>
-                                    {market.signals.length > 0 && (
-                                        <span className="px-2 py-0.5 rounded text-xs bg-red-500/20 text-red-300 border border-red-500/30 animate-pulse">
-                                            Signal Detected
-                                        </span>
-                                    )}
-                                </div>
-                                <h3 className="text-xl font-semibold text-white mb-2">{market.question}</h3>
-
-                                {/* Whale Movements Preview */}
-                                {market.movements.slice(0, 1).map((move, i) => (
-                                    <div key={i} className="flex items-center gap-2 text-xs text-purple-300 mb-2">
-                                        <Activity className="w-3 h-3" />
-                                        <span>
-                                            Whale {move.trader.substring(0, 6)}...
-                                            {move.type === 'BUY' ? ' bought ' : ' sold '}
-                                            {move.outcome} ({move.amount})
-                                        </span>
+            {/* Markets Table */}
+            <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20 backdrop-blur-sm">
+                <table className="w-full text-left border-collapse">
+                    <thead>
+                        <tr className="border-b border-white/10 bg-white/5">
+                            <th className="py-4 px-6 text-xs font-semibold text-gray-400 uppercase tracking-wider w-[40%]">Market</th>
+                            <th className="py-4 px-6 text-xs font-semibold text-gray-400 uppercase tracking-wider text-right">Price</th>
+                            <th className="py-4 px-6 text-xs font-semibold text-gray-400 uppercase tracking-wider text-right">Volume</th>
+                            <th className="py-4 px-6 text-xs font-semibold text-gray-400 uppercase tracking-wider text-center">Signals</th>
+                            <th className="py-4 px-6 text-xs font-semibold text-gray-400 uppercase tracking-wider text-right">Activity</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                        {filteredMarkets.map((market) => (
+                            <tr
+                                key={market.id}
+                                onClick={() => navigate(`/market/${market.id}`)}
+                                className="group hover:bg-white/5 transition-colors cursor-pointer"
+                            >
+                                <td className="py-4 px-6">
+                                    <div className="flex flex-col">
+                                        <div className="font-medium text-white group-hover:text-blue-300 transition-colors line-clamp-1">
+                                            {market.question}
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-white/10 text-gray-400">
+                                                {market.category}
+                                            </span>
+                                            {market.signals.length > 0 && (
+                                                <span className="flex items-center gap-1 text-[10px] text-red-400 font-medium animate-pulse">
+                                                    <AlertCircle className="w-3 h-3" />
+                                                    Anomaly
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
-                                ))}
-                            </div>
-                            <div className="text-right">
-                                <div className="text-3xl font-bold text-white">{(market.currentPrice * 100).toFixed(0)}¢</div>
-                                <div className="text-sm text-gray-400">Current Price</div>
-                            </div>
-                        </div>
-
-                        {/* Details Section */}
-                        <div className="space-y-2 border-t border-white/5 pt-4">
-                            <div className="flex items-center justify-between">
-                                <h4 className="text-sm font-medium text-gray-300">
-                                    Insights ({market.signals.length + market.movements.length})
-                                </h4>
-
-                                <div className="flex gap-3">
-                                    <a
-                                        href={`https://polymarket.com/event/${market.slug}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="flex items-center gap-1 text-sm text-gray-400 hover:text-white transition-colors"
-                                    >
-                                        <ExternalLink className="w-3 h-3" />
-                                        View on Polymarket
-                                    </a>
-                                    <button
-                                        onClick={() => setSelectedMarket(selectedMarket === market.id ? null : market.id)}
-                                        className="text-sm text-blue-400 hover:text-blue-300"
-                                    >
-                                        {selectedMarket === market.id ? 'Hide' : 'Show'} Details
-                                    </button>
-                                </div>
-                            </div>
-
-                            {selectedMarket === market.id && (
-                                <div className="space-y-4 animate-in slide-in-from-top-2 duration-200">
-                                    {/* Empty State */}
-                                    {market.signals.length === 0 && market.movements.length === 0 && (
-                                        <div className="text-center py-6 bg-black/20 rounded-xl border border-dashed border-white/10">
-                                            <div className="text-gray-500 text-sm">No signals detected yet</div>
-                                            <div className="text-gray-600 text-xs mt-1">Waiting for Pyth confidence anomalies or whale activity...</div>
-                                        </div>
-                                    )}
-
-                                    {/* Signals in Details */}
-                                    {market.signals.length > 0 && (
-                                        <div className="space-y-2">
-                                            <h5 className="text-xs text-gray-500 uppercase tracking-wider">Pyth Signals</h5>
-                                            {market.signals.map((signal) => (
-                                                <SignalCard key={signal.id} signal={signal} />
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {/* Movements in Details */}
-                                    {market.movements.length > 0 && (
-                                        <div className="space-y-2">
-                                            <h5 className="text-xs text-gray-500 uppercase tracking-wider">Top Trader Activity</h5>
-                                            {market.movements.map((move, i) => (
-                                                <div key={i} className="bg-black/20 p-3 rounded-lg flex justify-between items-center text-sm">
-                                                    <div className="flex gap-2 items-center">
-                                                        <div className={`w-2 h-2 rounded-full ${move.type === 'BUY' ? 'bg-green-500' : 'bg-red-500'}`} />
-                                                        <span className="text-gray-300 font-mono">{move.trader.substring(0, 8)}...</span>
-                                                    </div>
-                                                    <div className="text-white">
-                                                        {move.type} {move.outcome}
-                                                    </div>
-                                                    <div className="text-gray-400">
-                                                        {new Date(move.timestamp).toLocaleTimeString()}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
+                                </td>
+                                <td className="py-4 px-6 text-right">
+                                    <div className="font-mono font-bold text-white">
+                                        {(market.currentPrice * 100).toFixed(0)}¢
+                                    </div>
+                                    <div className="text-xs text-blue-400">Yes</div>
+                                </td>
+                                <td className="py-4 px-6 text-right">
+                                    <span className="text-sm text-gray-300 font-mono">
+                                        ${(market.volume / 1000).toFixed(1)}k
+                                    </span>
+                                </td>
+                                <td className="py-4 px-6">
+                                    <div className="flex justify-center">
+                                        {market.signals.length > 0 ? (
+                                            <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
+                                        ) : (
+                                            <div className="w-1.5 h-1.5 rounded-full bg-white/10" />
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="py-4 px-6 text-right">
+                                    <div className="flex items-center justify-end gap-2 text-gray-400 group-hover:text-white transition-colors">
+                                        {market.movements.length > 0 && (
+                                            <div className="flex items-center text-xs text-purple-400 mr-2">
+                                                <Activity className="w-3 h-3 mr-1" />
+                                                {market.movements.length}
+                                            </div>
+                                        )}
+                                        <ChevronRight className="w-4 h-4 opacity-50 group-hover:opacity-100" />
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                {filteredMarkets.length === 0 && (
+                    <div className="py-12 text-center text-gray-500 bg-white/5">
+                        No markets found in this category
                     </div>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-function SignalCard({ signal }: { signal: any }) {
-    // Determine direction from confidence or if we had a previous value.
-    // Pyth signal just gives "Confidence Low/High". 
-    // Let's assume High Severity = BAD/Low Confidence? Or High Severity = High Volatility?
-    // Based on backend: isAnomaly means confidence spike.
-    // Let's display it generically.
-
-    return (
-        <div className="bg-black/30 border border-white/5 rounded-xl p-4 hover:bg-black/40 transition-all">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-yellow-500/10 border-yellow-500/30 text-yellow-500`}>
-                        <Activity className="w-4 h-4" />
-                        <span className="font-medium">CONFIDENCE ANOMALY</span>
-                    </div>
-                    <div>
-                        <div className="text-sm text-gray-400">Source: <span className="text-white font-mono">Pyth Network</span></div>
-                        <div className="flex gap-4 mt-1">
-                            <span className="text-xs text-gray-500">Confidence: <span className="text-blue-400 font-medium">{signal.confidence.toFixed(4)}</span></span>
-                            <span className="text-xs text-gray-500">Price: <span className="text-purple-400 font-medium">${signal.price}</span></span>
-                        </div>
-                    </div>
-                </div>
+                )}
             </div>
         </div>
     );
