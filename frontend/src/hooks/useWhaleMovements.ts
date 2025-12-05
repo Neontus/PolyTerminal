@@ -14,6 +14,7 @@ export interface WhaleMovement {
   amount: number;
   price: number;
   timestamp: number;
+  pnl?: number;
 }
 
 export function useWhaleMovements() {

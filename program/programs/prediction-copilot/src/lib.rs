@@ -39,6 +39,7 @@ pub mod prediction_copilot {
     pub fn add_trader(
         ctx: Context<AddTrader>,
         polygon_address: [u8; 20],
+        solana_address: Option<Pubkey>, // [NEW]
         tier: u8,
         total_pnl: i64,
         win_rate: u16,
@@ -49,6 +50,7 @@ pub mod prediction_copilot {
         instructions::registry::add_trader(
             ctx,
             polygon_address,
+            solana_address, // [NEW]
             tier,
             total_pnl,
             win_rate,
@@ -108,6 +110,22 @@ pub mod prediction_copilot {
             baseline_confidence,
             multiplier,
             severity,
+        )
+    }
+
+    pub fn record_whale_movement(
+        ctx: Context<RecordWhaleMovement>,
+        polygon_address: [u8; 20],
+        amount: u64,
+        token: String,
+        direction: String,
+    ) -> Result<()> {
+        instructions::movement::record_whale_movement(
+            ctx,
+            polygon_address,
+            amount,
+            token,
+            direction
         )
     }
 }

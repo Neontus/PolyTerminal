@@ -53,6 +53,7 @@ impl WhaleRegistry {
 #[account]
 pub struct TrackedTrader {
     pub polygon_address: [u8; 20],  // Ethereum/Polygon address (20 bytes)
+    pub solana_address: Option<Pubkey>, // [NEW] Optional Solana address to track deposits
     pub tier: u8,                   // 0 = whale, 1 = shark, 2 = fish, 3 = shrimp, 4 = degen
     pub total_pnl: i64,             // Scaled by 1e6 (can be negative)
     pub win_rate: u16,              // Basis points (7500 = 75.00%)
@@ -66,7 +67,7 @@ pub struct TrackedTrader {
 }
 
 impl TrackedTrader {
-    pub const LEN: usize = 8 + 20 + 1 + 8 + 2 + 4 + 8 + 4 + 8 + 8 + 8 + 1; // 80
+    pub const LEN: usize = 8 + 20 + (1 + 32) + 1 + 8 + 2 + 4 + 8 + 4 + 8 + 8 + 8 + 1; // 113
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]

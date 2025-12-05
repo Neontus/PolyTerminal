@@ -5,6 +5,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import { polymarketService } from './services/polymarket';
 import { pythService } from './services/pyth';
+import { whaleWatcher } from './indexer/WhaleWatcher';
 
 // Load environment variables
 dotenv.config();
@@ -71,11 +72,32 @@ app.get('/health', (_req, res) => {
 app.get('/api/markets', async (req, res) => {
     try {
         const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
-        const markets = await polymarketService.getTopMarkets(limit);
+        const category = req.query.category ? (req.query.category as string) : undefined;
+        const markets = await polymarketService.getTopMarkets(limit, category);
         res.json(markets);
     } catch (error) {
         console.error('Error fetching markets:', error);
         res.status(500).json({ error: 'Failed to fetch markets' });
+    }
+});
+
+/**
+ * GET /api/markets/:id
+ * Fetch a single market by ID
+ */
+app.get('/api/markets/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        const market = await polymarketService.getMarket(id);
+        
+        if (market) {
+            res.json(market);
+        } else {
+            res.status(404).json({ error: 'Market not found' });
+        }
+    } catch (error) {
+        console.error(`Error fetching market ${req.params.id}:`, error);
+        res.status(500).json({ error: 'Failed to fetch market' });
     }
 });
 
@@ -107,6 +129,11 @@ app.get('/api/signals/whales', async (_req, res) => {
     }
 });
 
+// Get Tracked Whales
+app.get('/api/config/whales', (_req, res) => {
+    res.json(polymarketService.getTrackedWhales());
+});
+
 // Config Endpoint
 app.post('/api/config/whales', (req, res) => {
     const { addresses } = req.body;
@@ -116,6 +143,28 @@ app.post('/api/config/whales', (req, res) => {
     } else {
         res.status(400).json({ error: 'Invalid format. Expected { addresses: string[] }' });
     }
+});
+
+// Auto-Discover Endpoint
+app.post('/api/config/whales/auto-discover', async (_req, res) => {
+    try {
+        const traders = await polymarketService.discoverTopTraders();
+        res.json({ success: true, count: traders.length, traders });
+    } catch (e) {
+        console.error("Auto-discover endpoint failed", e);
+        res.status(500).json({ error: 'Failed to auto-discover traders' });
+    }
+});
+
+// Start Watcher Endpoint
+app.post('/api/config/watch', (req, res) => {
+    const { solanaAddress, polygonAddress } = req.body;
+    if (solanaAddress && polygonAddress) {
+        whaleWatcher.watch(solanaAddress, polygonAddress);
+        res.json({ success: true, message: `Started watching ${solanaAddress}` });
+        return; // Explicit return to avoid void/Response type issues
+    }
+    res.status(400).json({ error: 'Missing solanaAddress or polygonAddress' });
 });
 
 // Start server

@@ -71,6 +71,7 @@ pub struct AddTrader<'info> {
 pub fn add_trader(
     ctx: Context<AddTrader>,
     polygon_address: [u8; 20],
+    solana_address: Option<Pubkey>, // [NEW]
     tier: u8,
     total_pnl: i64,
     win_rate: u16,
@@ -88,7 +89,7 @@ pub fn add_trader(
     let now = Clock::get()?.unix_timestamp;
     
     trader.polygon_address = polygon_address;
-    trader.tier = tier;
+    trader.solana_address = solana_address; // [NEW]
     trader.total_pnl = total_pnl;
     trader.win_rate = win_rate;
     trader.trade_count = trade_count;

@@ -1,51 +1,51 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TrendingUp, Activity, Plus, ChevronRight, BarChart2, AlertCircle } from 'lucide-react';
+import { ChevronRight, BarChart2, Activity } from 'lucide-react';
 import { usePolymarket } from '../hooks/usePolymarket';
 import { usePythSignals } from '../hooks/usePythSignals';
 import { useWhaleMovements } from '../hooks/useWhaleMovements';
-import axios from 'axios';
+import { useWhaleNotifications } from '../hooks/useWhaleNotifications';
+import WhaleInput from './WhaleInput';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+// const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export default function MarketList() {
     const navigate = useNavigate();
-    const { markets, loading: marketsLoading } = usePolymarket();
+    const [filter, setFilter] = useState('All Categories');
+    const mappedFilter = filter === 'All Categories' ? undefined : filter;
+    const { markets, loading: marketsLoading } = usePolymarket(mappedFilter);
     const { signals } = usePythSignals();
     const { movements } = useWhaleMovements();
-    const [filter, setFilter] = useState('All Categories');
+
+    // Enable Notifications
+    useWhaleNotifications();
 
     // Whale Config State
-    const [whaleInput, setWhaleInput] = useState('');
-    const [configStatus, setConfigStatus] = useState<'idle' | 'success' | 'error'>('idle');
-
-    const handleAddWhale = async () => {
-        if (!whaleInput) return;
-        try {
-            await axios.post(`${API_URL}/api/config/whales`, {
-                addresses: [whaleInput]
-            });
-            setWhaleInput('');
-            setConfigStatus('success');
-            setTimeout(() => setConfigStatus('idle'), 3000);
-        } catch (err) {
-            console.error(err);
-            setConfigStatus('error');
-        }
-    };
 
     // Combine data
-    const enrichedMarkets = useMemo(() => {
+    const filteredMarkets = useMemo(() => {
         return markets.map(market => {
             const marketSignals = signals.filter(s => {
                 const keyword = s.marketId.split('/')[0];
                 const mappings: Record<string, string[]> = {
                     'BTC': ['Bitcoin', 'BTC'],
-                    'ETH': ['Ethereum', 'Ether', 'ETH'],
+                    'ETH': ['Ethereum', 'ETH'],
                     'SOL': ['Solana', 'SOL']
                 };
                 const keywords = mappings[keyword] || [keyword];
-                return keywords.some(k => market.question.includes(k));
+
+                // Category check via market.category is unreliable if heuristic fails, 
+                // but Pyth signals are mostly Crypto anyway.
+                if (['BTC', 'ETH', 'SOL'].includes(keyword) && market.category !== 'Crypto') {
+                    // Loose check: If we are in 'Crypto' tab, we expect crypto.
+                    // If we are in 'Sports', we likely won't get BTC signals unless it's a cross-market?
+                    return false;
+                }
+
+                return keywords.some(k => {
+                    const regex = new RegExp(`\\b${k}\\b`, 'i');
+                    return regex.test(market.question);
+                });
             });
 
             const marketMovements = movements.filter(m =>
@@ -59,10 +59,6 @@ export default function MarketList() {
             };
         });
     }, [markets, signals, movements]);
-
-    const filteredMarkets = filter === 'All Categories'
-        ? enrichedMarkets
-        : enrichedMarkets.filter(m => m.category === filter);
 
     if (marketsLoading) {
         return (
@@ -87,22 +83,8 @@ export default function MarketList() {
 
                 <div className="flex gap-4 items-center">
                     {/* Whale Config Input */}
-                    <div className="hidden md:flex items-center gap-2 bg-white/5 rounded-lg px-3 py-1.5 border border-white/10 hover:border-white/20 transition-colors">
-                        <input
-                            type="text"
-                            placeholder="Track Address..."
-                            value={whaleInput}
-                            onChange={(e) => setWhaleInput(e.target.value)}
-                            className="bg-transparent border-none focus:outline-none text-xs text-white w-32 placeholder-gray-500"
-                        />
-                        <button
-                            onClick={handleAddWhale}
-                            className="p-1 hover:bg-white/10 rounded transition-colors text-blue-400"
-                            title="Add to Tracker"
-                        >
-                            <Plus className="w-3 h-3" />
-                        </button>
-                        {configStatus === 'success' && <span className="text-[10px] text-green-400">Added!</span>}
+                    <div className="hidden md:block">
+                        <WhaleInput />
                     </div>
 
                     <select
@@ -146,12 +128,6 @@ export default function MarketList() {
                                             <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-white/10 text-gray-400">
                                                 {market.category}
                                             </span>
-                                            {market.signals.length > 0 && (
-                                                <span className="flex items-center gap-1 text-[10px] text-red-400 font-medium animate-pulse">
-                                                    <AlertCircle className="w-3 h-3" />
-                                                    Anomaly
-                                                </span>
-                                            )}
                                         </div>
                                     </div>
                                 </td>

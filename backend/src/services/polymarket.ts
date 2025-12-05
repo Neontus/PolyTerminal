@@ -15,6 +15,7 @@ export interface PolymarketMarket {
     }[];
     endDate: string;
     active: boolean;
+    eventId?: string;
     // Optional for UI enrichment
     signals?: any[];
     movements?: any[];
@@ -30,17 +31,14 @@ export interface TraderMovement {
     amount: number;
     price: number;
     timestamp: number;
+    pnl?: number;
 }
 
 const GRAPH_API_URL = 'https://gamma-api.polymarket.com/events';
 const CLOB_API_URL = 'https://clob.polymarket.com';
 
 // Mock Whales for Hackathon
-const TRACKED_WHALES = [
-    '0x4b16c5de96eb2117bbe5fd171e4d2058', // Example short hash
-    '0x88e6a0c2ddd26feeb64f039a2c41296f', // Example
-    '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045' // vitalik.eth
-];
+const TRACKED_WHALES: string[] = [];
 
 export class PolymarketService {
     // Store real fetched markets to correlate whale activity
@@ -171,17 +169,25 @@ export class PolymarketService {
             console.log(`Subscribed to ${assetIds.length} assets on Polymarket WS`);
         }
     }
-    async getTopMarkets(limit: number = 10): Promise<PolymarketMarket[]> {
+    async getTopMarkets(limit: number = 10, category?: string): Promise<PolymarketMarket[]> {
         try {
             // Using the Gamma API /events endpoint for fresh 2025 markets
+            const params: any = {
+                limit,
+                active: true,
+                closed: false,
+                order: 'createdAt',
+                ascending: false
+            };
+
+            if (category && category !== 'Overall') {
+                // Map UI categories to Gamma API slugs if needed, or use direct
+                // Common slugs: 'crypto', 'sports', 'politics', 'business'
+                params.tag_slug = category.toLowerCase();
+            }
+
             const response = await axios.get(`${GRAPH_API_URL}`, {
-                params: {
-                    limit,
-                    active: true,
-                    closed: false,
-                    order: 'createdAt',
-                    ascending: false
-                },
+                params,
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     'Accept': 'application/json'
@@ -223,6 +229,7 @@ export class PolymarketService {
 
                 markets.push({
                     id: m.conditionId, // Use conditionId as unique ID
+                    eventId: event.id, // ID for comments/social
                     question: m.question,
                     slug: event.slug, // Use event slug for navigation
                     volume: m.liquidity ? parseFloat(m.liquidity) : 0, // Gamma uses liquidity or volume
@@ -253,15 +260,118 @@ export class PolymarketService {
     }
 
     /**
+     * Get a specific market by ID (Condition ID)
+     */
+    async getMarket(id: string): Promise<PolymarketMarket | null> {
+        try {
+            // Check cache first
+            if (this.currentMarkets) {
+                const cached = this.currentMarkets.find(m => m.id === id);
+                if (cached) return cached;
+            }
+
+            // Fetch from CLOB API
+            // content-type: application/json
+            const response = await axios.get(`${CLOB_API_URL}/markets/${id}`);
+            const m = response.data;
+
+            if (!m) return null;
+
+            return {
+                id: m.condition_id,
+                question: m.question,
+                slug: m.market_slug,
+                volume: 0, // CLOB API single market endpoint doesn't return volume
+                endDate: m.end_date_iso,
+                active: m.active,
+                // eventId is not provided in CLOB response. 
+                // Comments might not load correctly without it if strict filtering is on.
+                eventId: undefined, 
+                tokens: (m.tokens || []).map((t: any) => ({
+                    tokenId: t.token_id,
+                    price: t.price,
+                    outcome: t.outcome,
+                    winner: t.winner
+                }))
+            };
+
+        } catch (error) {
+            console.error(`Error fetching individual market ${id} from CLOB:`, error);
+            return null;
+        }
+    }
+
+    /**
      * Update the list of tracked whales dynamically
      */
     setTrackedWhales(addresses: string[]) {
         if (addresses && addresses.length > 0) {
-            // Replace the static list with user provided list
-            // We modify the global const by pushing to it or we can change implementation to use a class property.
-            // Since TRACKED_WHALES is a const module-level, better to make it a class property or modify the usage.
-            // Let's modify the usage in getWhaleMovements to prefer a class property.
-            this.customWhales = addresses;
+            // Append new addresses, avoiding duplicates
+            const newAddresses = addresses.filter(addr => !this.customWhales.includes(addr));
+            this.customWhales = [...this.customWhales, ...newAddresses];
+            console.log(`Updated tracked whales: ${this.customWhales.length} users`);
+        }
+    }
+
+    getTrackedWhales(): string[] {
+        return this.customWhales;
+    }
+
+    /**
+     * Auto-discover top traders by looking at holders of top markets
+     */
+    async discoverTopTraders(limit: number = 10): Promise<string[]> {
+        console.log("Starting auto-discovery of top traders...");
+        try {
+            // 1. Get Top Markets to find where the action is
+            const markets = await this.getTopMarkets(5); // Top 5 active markets
+            const uniqueTraders = new Set<string>();
+            const traderScores = new Map<string, number>();
+
+            // 2. Fetch Holders for each market
+            for (const market of markets) {
+                try {
+                    // https://data-api.polymarket.com/holders?market=CONDITION_ID
+                    const response = await axios.get(`https://data-api.polymarket.com/holders`, {
+                        params: { market: market.id }
+                    });
+                    
+                    const holders = response.data;
+                    if (Array.isArray(holders)) {
+                        for (const holder of holders) {
+                            // Filter out small holders or noise if necessary
+                            // API returns: { asset: string, amount: string, user: string }
+                            const user = holder.user;
+                            const amount = parseFloat(holder.amount || '0');
+                            
+                            if (amount > 10) { // arbitrary small threshold to filter dust
+                                uniqueTraders.add(user);
+                                // Simple score: accumulate size (rough proxy for activity/wealth)
+                                const currentScore = traderScores.get(user) || 0;
+                                traderScores.set(user, currentScore + amount);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error(`Failed to fetch holders for market ${market.id}`, e);
+                }
+            }
+
+            // 3. Sort by score and take top N
+            const sortedTraders = Array.from(traderScores.entries())
+                .sort((a, b) => b[1] - a[1]) // Descending by score
+                .map(entry => entry[0])
+                .slice(0, limit);
+
+            // 4. Update tracked list
+            this.setTrackedWhales(sortedTraders);
+            
+            console.log(`Auto-discovered ${sortedTraders.length} top traders.`);
+            return sortedTraders;
+
+        } catch (e) {
+            console.error("Auto-discovery failed", e);
+            return [];
         }
     }
 
@@ -309,43 +419,61 @@ export class PolymarketService {
      * Get recent movements for tracked whales (Mock/Simulated for Hackathon)
      * In a real production app, this would query Covalent/TheGraph for TransferSingle events on CTF.
      */
-    async getWhaleMovements(): Promise<TraderMovement[]> {
-        // Mock data generator for demo purposes
-        const movements: TraderMovement[] = [];
-        const actions = ['BUY', 'SELL'];
-        const outcomes = ['YES', 'NO'];
-        
-        // Generate 3-5 random movements
-        const count = 3 + Math.floor(Math.random() * 3);
-        
-        // Ensure we have markets to reference
-        const refMarkets = this.currentMarkets.length > 0 ? this.currentMarkets : this.generateMockMarkets();
+    /**
+     * Get real positions for tracked users from Polymarket Data API
+     */
+    async getUserPositions(address: string): Promise<any[]> {
+        try {
+            // https://data-api.polymarket.com/positions?user=ADDRESS&sortBy=CASHPNL
+            const response = await axios.get(`https://data-api.polymarket.com/positions`, {
+                params: {
+                    user: address,
+                    sortBy: 'CASHPNL'
+                }
+            });
+            return Array.isArray(response.data) ? response.data : [];
+        } catch (e) {
+            console.error(`Failed to fetch positions for ${address}`, e);
+            return [];
+        }
+    }
 
+    /**
+     * Get recent movements/positions for tracked whales
+     * For Hackathon/Demo: We will treat "Current Positions" as "Movements" to show PnL and activity.
+     */
+    async getWhaleMovements(): Promise<TraderMovement[]> {
+        const movements: TraderMovement[] = [];
+        
         // Use user-provided whales if available, otherwise default list
         const sourceWhales = this.customWhales.length > 0 ? this.customWhales : TRACKED_WHALES;
 
-        for (let i = 0; i < count; i++) {
-            const whale = sourceWhales[Math.floor(Math.random() * sourceWhales.length)];
-            const action = actions[Math.floor(Math.random() * actions.length)] as 'BUY' | 'SELL';
-            const outcome = outcomes[Math.floor(Math.random() * outcomes.length)] as 'YES' | 'NO';
-            const price = 0.3 + Math.random() * 0.6; // Random price between 0.30 and 0.90
+        for (const whale of sourceWhales) {
+            const positions = await this.getUserPositions(whale);
             
-            // Pick a random real market
-            const market = refMarkets[Math.floor(Math.random() * refMarkets.length)];
+            for (const pos of positions) {
+                // Map position data to our Movement interface
+                // Note: The Data API returns current state, not individual trade history events in this endpoint.
+                // We will map "currentValue" -> amount/price effectively for the demo view.
+                
+                if (pos.size === 0) continue; // Skip closed positions
 
-            movements.push({
-                txHash: '0x' + Math.random().toString(16).slice(2, 40),
-                trader: whale,
-                marketId: market.id, // REAL Market ID
-                marketQuestion: market.question, // REAL Market Question
-                type: action,
-                outcome: outcome,
-                amount: Math.floor(Math.random() * 10000),
-                price: parseFloat(price.toFixed(2)),
-                timestamp: Date.now() - Math.floor(Math.random() * 3600000) // Within last hour
-            });
+                movements.push({
+                    txHash: `pos-${pos.asset}-${Date.now()}`, // Synth ID
+                    trader: whale,
+                    marketId: pos.conditionId || pos.asset, 
+                    marketQuestion: pos.title || 'Unknown Market',
+                    type: pos.size > 0 ? 'BUY' : 'SELL', // Simplification
+                    outcome: pos.outcome,
+                    amount: Math.abs(pos.size),
+                    price: pos.avgPrice,
+                    pnl: pos.cashPnl || 0,
+                    timestamp: pos.updatedAt ? new Date(pos.updatedAt).getTime() : Date.now()
+                });
+            }
         }
         
+        // Sort by timestamp (newest first)
         return movements.sort((a, b) => b.timestamp - a.timestamp);
     }
 }
